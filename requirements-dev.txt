@@ -1,0 +1,4 @@
+# Development and testing dependencies
+pytest>=7.0,<8.0
+pytest-mock>=3.10,<4.0
+flake8>=5.0,<6.0
