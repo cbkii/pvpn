@@ -1,4 +1,4 @@
-Below is a **complete, unambiguous Statement of Requirements** for `pvpn`—a headless (no-GUI) Raspberry Pi OS (Bookworm) CLI client that seamlessly combines ProtonVPN WireGuard, NAT‐PMP port‐forwarding, qBittorrent-nox integration, routing controls (kill-switch & split-tunnel), and a fully modular `init` workflow. As an expert developer, take this spec and implement a production-ready solution without missing any critical detail:
+Below is a **complete, unambiguous Statement of Requirements** for `pvpn`—a headless (no-GUI) Raspberry Pi OS (Bookworm) CLI client that seamlessly combines ProtonVPN WireGuard, NAT‐PMP port‐forwarding, qBittorrent-nox integration, routing controls (kill-switch), and a fully modular `init` workflow. As an expert developer, take this spec and implement a production-ready solution without missing any critical detail:
 
 ---
 
@@ -16,7 +16,6 @@ Below is a **complete, unambiguous Statement of Requirements** for `pvpn`—a he
 
 - **Base config dir:** `~/.pvpn-cli/pvpn/`  
   - `config.ini` — all persistent settings (INI format, grouped by section)  
-  - `tunnel.json` — split-tunnel rules `{ processes:[], pids:[], ips:[] }`  
   - `wireguard/` — downloaded ProtonVPN `.conf` files  
   - `pvpn.log` — operation logs  
 
@@ -26,14 +25,13 @@ Below is a **complete, unambiguous Statement of Requirements** for `pvpn`—a he
 
 **Usage:**  
 ```bash
-pvpn init [--proton] [--qb] [--tunnel] [--network]
+pvpn init [--proton] [--qb] [--network]
 ```
 
 - **Global flags:**  
   - `--proton`      ⇒ configure ProtonVPN settings  
   - `--qb`          ⇒ configure qBittorrent-nox settings  
-  - `--tunnel`      ⇒ configure split-tunnel defaults  
-  - `--network`     ⇒ configure kill-switch / DNS defaults  
+  - `--network`     ⇒ configure kill-switch / DNS defaults
   - If none of the above are passed, run full interactive setup for **all** components.
 
 - **When `--proton`:** prompt or accept:  
@@ -49,15 +47,13 @@ pvpn init [--proton] [--qb] [--tunnel] [--network]
   - `--qb-user USER`  
   - `--qb-pass PASS`  
 
-- **When `--tunnel`:** prompt or accept:  
-  - `--tunnel-json PATH` (where to store `tunnel.json`; default: `~/.pvpn-cli/pvpn/tunnel.json`)  
 
 - **When `--network`:** prompt or accept:  
   - `--ks-default true|false` (kill-switch default on connect; default false)  
   - `--dns-default true|false` (use Proton DNS by default; default true)  
   - `--threshold-default INT` (server-load threshold, 1–100; default 60)  
 
-All values are written to `config.ini` under sections `[protonvpn]`, `[qbittorrent]`, `[tunnel]`, and `[network]`.  
+All values are written to `config.ini` under sections `[protonvpn]`, `[qbittorrent]`, and `[network]`.
 
 ---
 
@@ -109,8 +105,8 @@ pvpn connect \
        -d '{"listen_port":PORT,"upnp":false,"random_port":false}' \
        ${QB_URL}/api/v2/app/setPreferences
      ```  
-   - Else stop `qbittorrent-nox`, edit `~/.config/qBittorrent/qBittorrent.conf`, set `Connection\Port=PORT`, restart.  
-   - After restart, wait ≤2 min; if no active downloads, call WebUI `/torrents/resumeAll` or `qbittorrentapi` to resume.
+   - Else log a warning and skip the port update.
+   - Afterward, wait ≤2 min; if no active downloads, call WebUI `/torrents/resumeAll` or `qbittorrentapi` to resume.
 
 ### 4.2 `pvpn disconnect` (`pvpn d`)
 
@@ -146,34 +142,7 @@ pvpn list [--cc COUNTRY] [--sc] [--p2p] [--fastest ping|api] [--threshold INT]
 
 ---
 
-## 5. Split-Tunnel Management
-
-```bash
-pvpn tunnel --add|--rm [--process NAME] [--pid PID] [--ip IP]  
-pvpn tunnel --edit
-```
-
-- **--add / --rm** apply to exactly one of:
-  - `--process NAME` (binary name)  
-  - `--pid PID`        (numeric process id)  
-  - `--ip IP`          (IPv4 or CIDR)  
-- **Behavior on connect/disconnect:**  
-  - Mark packets in mangle table:  
-    ```sh
-    iptables -t mangle -A OUTPUT -m owner --pid-owner PID -j MARK --set-mark 1
-    iptables -t mangle -A OUTPUT -m string --string "qbittorrent-nox" --algo bm -j MARK --set-mark 1
-    iptables -t mangle -A OUTPUT -d IP -j MARK --set-mark 1
-    ```
-  - Add policy route:  
-    ```sh
-    ip rule add fwmark 1 table 100
-    ip route add default via <MAIN_GW> dev <MAIN_IF> table 100
-    ```
-- **--edit** opens `tunnel.json` in `$EDITOR`.
-
----
-
-## 6. Developer Guidance
+## 5. Developer Guidance
 
 - **Idempotency:** repeated commands must clean up previous state.  
 - **Error handling:** clear exit codes & messages on login failures, no servers, NAT-PMP errors, API errors.  
@@ -182,14 +151,14 @@ pvpn tunnel --edit
 
 ---
 
-## 7. Additional Supporting Research
+## 6. Additional Supporting Research
 
 This section includes research on the latest ProtonVPN documentation and reputable GitHub scripts to validate and refine the specification.
-The research seeks to be fully aligned with the current ProtonVPN capabilities, NAT-PMP handling, port forwarding, authentication, split-tunnel methods, kill-switch practices, and best practices for headless (CLI-only) Linux environments.
+The research seeks to be fully aligned with the current ProtonVPN capabilities, NAT-PMP handling, port forwarding, authentication, kill-switch practices, and best practices for headless (CLI-only) Linux environments.
 
 # ProtonVPN WireGuard CLI Client: Requirements
 
-The CLI tool must manage **WireGuard-based** VPN connections via ProtonVPN and integrate with a headless torrent client (qBittorrent-nox). It should run on Raspberry Pi OS (Bookworm/Debian 12) and support all key features reliably. Crucial requirements include selecting ProtonVPN servers by country and purpose, automatic port forwarding, torrent-port updates, routing controls (kill-switch and split-tunnel), and modular command-line configuration. All functionality should rely on ProtonVPN’s APIs and standard Linux tools. The detailed requirements are as follows:
+The CLI tool must manage **WireGuard-based** VPN connections via ProtonVPN and integrate with a headless torrent client (qBittorrent-nox). It should run on Raspberry Pi OS (Bookworm/Debian 12) and support all key features reliably. Crucial requirements include selecting ProtonVPN servers by country and purpose, automatic port forwarding, torrent-port updates, routing controls (kill-switch), and modular command-line configuration. All functionality should rely on ProtonVPN’s APIs and standard Linux tools. The detailed requirements are as follows:
 
 ## VPN Connection Handling (WireGuard)
 
@@ -205,11 +174,11 @@ The CLI tool must manage **WireGuard-based** VPN connections via ProtonVPN and i
 
 - **Protocol support:** After the WireGuard tunnel is up, the tool must request port mappings from ProtonVPN’s server using **NAT-PMP**. ProtonVPN’s WireGuard servers support NAT-PMP only on P2P-flagged servers ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=Step%201%3A%20Download%20OpenVPN%20or,WireGuard%20configuration%20files)) ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=2,PMP%20%28port%20forwarding%29%20is%20enabled)). To leverage this, the CLI should run a NAT-PMP client (e.g. `natpmpc` or a Python NAT-PMP library) to request a random port on the server and map it to the local qBittorrent port. For example, Proton’s docs show installing `natpmpc` and looping it to renew mappings periodically ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=5,Enter)). The tool should do similar: use `natpmpc` (or a Python equivalent like [py-natpmp]) to add a port mapping, and continuously refresh it so it does not expire ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=5,Enter)). If the user’s plan or server selection disallows NAT-PMP, the tool should detect and report that port forwarding is unavailable.
 
-- **qBittorrent port update:** Once a public port is obtained, the CLI must update qBittorrent-nox’s listening port to match. If the Web UI (API) is enabled for localhost, use its `/api/v2/app/setPreferences` endpoint. For instance:  
+- **qBittorrent port update:** Once a public port is obtained, the CLI must update qBittorrent-nox’s listening port to match using the Web UI (API) bound to localhost:
   ```bash
   curl -X POST -d '{"listen_port": NEW_PORT}' http://localhost:WEBUI_PORT/api/v2/app/setPreferences
-  ```  
-  as shown in qBittorrent’s forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows)). (The `random_port` option should be disabled via a similar API call.) If the Web UI is not available (or locked down), fall back to editing the qBittorrent configuration file (e.g. `~/.config/qBittorrent/qBittorrent.conf`), replacing the `Connection\Port=` entry and restarting the daemon ([API Access and listening port - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=7708#:~:text=Post%20%20%20by%20,Nov%2012%2C%202019%206%3A38%20pm)). In either case, ensure qBittorrent’s UPnP/NAT-PMP feature is disabled to avoid conflicts with the VPN’s port-forward.
+  ```
+  as shown in qBittorrent’s forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows)). The `random_port` option should be disabled via a similar API call. If the Web UI is not available (or locked down), the port update is skipped. Ensure qBittorrent’s UPnP/NAT-PMP feature is disabled to avoid conflicts with the VPN’s port-forward.
 
 ## Kill-Switch and Routing Controls
 
@@ -217,17 +186,14 @@ The CLI tool must manage **WireGuard-based** VPN connections via ProtonVPN and i
 
 - **Optional Kill-Switch:** Provide an optional *iptables-based kill switch* that blocks all non-VPN traffic. Practically, this means setting iptables policies to drop OUTPUT to all but the loopback and the VPN interface. For example, one might run `iptables -P OUTPUT DROP` and then `iptables -A OUTPUT -o wg0 -j ACCEPT` (and similar for INPUT/LOOPBACK) ([What is a kill switch? | Proton VPN](https://protonvpn.com/support/what-is-kill-switch?srsltid=AfmBOorRVdj3d2_krw8_3fBHGnUJxi8kftpUM1ngwJFfMdd3Y-jZtv5e#:~:text=A%20kill%20switch%20is%20a,In%20case%20the)). The tool should record/backup the original iptables state so it can restore (disable the kill switch) later. This advanced kill switch ensures **no traffic leaks** if the VPN drops ([What is a kill switch? | Proton VPN](https://protonvpn.com/support/what-is-kill-switch?srsltid=AfmBOorRVdj3d2_krw8_3fBHGnUJxi8kftpUM1ngwJFfMdd3Y-jZtv5e#:~:text=A%20kill%20switch%20is%20a,In%20case%20the)). (Note: Proton’s desktop “Advanced Kill Switch” has similar behavior ([What is a kill switch? | Proton VPN](https://protonvpn.com/support/what-is-kill-switch?srsltid=AfmBOorRVdj3d2_krw8_3fBHGnUJxi8kftpUM1ngwJFfMdd3Y-jZtv5e#:~:text=A%20kill%20switch%20is%20a,In%20case%20the)).) The kill-switch must be reversible: include a command like `pvpn killswitch off` or run on disconnect to reset iptables.
 
-- **Split-tunnel support:** Even with the kill switch available, the tool should also allow *split tunneling* when the kill switch is disabled. In split mode, the user can specify certain destination IP addresses or subnets that should bypass the VPN (go through the normal gateway). This can be implemented by adding policy routing rules: e.g. use `iptables -t mangle -A OUTPUT -d 1.2.3.4 -j MARK --set-mark 1` and `ip rule add fwmark 1 table 100`, with table 100 routed via the physical NIC (eth0) ([ Kali Linux VPN Split Tunneling: How to Route Traffic Securely ](https://cyfuture.cloud/kb/linux/kali-linux-vpn-split-tunneling#:~:text=sudo%20iptables%20,mark%201)). For specific processes, one can run them in a separate network namespace or use cgroup-based packet marking so only those processes’ traffic uses the main route. (In practice, ProtonVPN’s CLI does not allow kill-switch and split-tunnel simultaneously, so our tool should require the user to disable one before enabling the other.) 
 
 ## qBittorrent-nox Integration
 
-- **Web UI API usage:** If the user enables qBittorrent’s Web UI (bound to localhost), the CLI should use the WebAPI to update settings. After obtaining a forwarded port, send an HTTP POST to `/api/v2/app/setPreferences` with JSON `{"listen_port": PORT}` (as demonstrated by the qBittorrent forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows))). The user should configure the Web UI to allow localhost updates (e.g. enable “Bypass authentication for local clients” or set a known token). This approach avoids restarting qBittorrent.
-
-- **Config file fallback:** If the WebUI is not active, the tool must edit qBittorrent’s config directly. For example, stop `qbittorrent-nox`, open its config file (often `~/.config/qBittorrent/qBittorrent.conf`), change `Connection\Port=...` to the new port, and restart. (This technique was suggested by qBittorrent developers when APIs fail ([API Access and listening port - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=7708#:~:text=Post%20%20%20by%20,Nov%2012%2C%202019%206%3A38%20pm)).) The CLI should locate the config automatically or accept it via an option.
+- **Web UI API usage:** qBittorrent’s Web UI (bound to localhost) is required for port updates. After obtaining a forwarded port, send an HTTP POST to `/api/v2/app/setPreferences` with JSON `{"listen_port": PORT}` (as demonstrated by the qBittorrent forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows))). The WebUI must allow localhost updates (e.g. enable “Bypass authentication for local clients” or set a known token). If the WebUI is disabled, port updates are skipped. Enabling the WebUI may require a one-time manual restart of `qbittorrent-nox`.
 
 ## Command-Line Interface Design
 
-- **Subcommands & argument parsing:** Use a robust CLI framework (e.g. Python’s `argparse` or `click`) with subcommands. The top-level tool might be `pvpn`, with commands like `pvpn init`, `pvpn connect`, `pvpn disconnect`, `pvpn killswitch`, etc. Using `add_subparsers()` in `argparse` is recommended for clarity ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Providing%20subcommands%20in%20your%20CLI,ArgumentParser)). Provide concise help (`-h/--help`) for each option; `argparse` will auto-generate usage messages for user-friendliness ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Great%2C%20now%20your%20program%20automatically,into%20your%20code)). Employ clear option names (e.g. `--country`, `--securecore`, `--split-ip`) and validate inputs (e.g. check server codes against Proton’s API).
+  - **Subcommands & argument parsing:** Use a robust CLI framework (e.g. Python’s `argparse` or `click`) with subcommands. The top-level tool might be `pvpn`, with commands like `pvpn init`, `pvpn connect`, `pvpn disconnect`, `pvpn killswitch`, etc. Using `add_subparsers()` in `argparse` is recommended for clarity ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Providing%20subcommands%20in%20your%20CLI,ArgumentParser)). Provide concise help (`-h/--help`) for each option; `argparse` will auto-generate usage messages for user-friendliness ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Great%2C%20now%20your%20program%20automatically,into%20your%20code)). Employ clear option names (e.g. `--country`, `--securecore`) and validate inputs (e.g. check server codes against Proton’s API).
 
 - **Configuration persistence:** Store all settings (credentials, preferred country, P2P preference, qb-webui details, routing choices, etc.) in a persistent config file or files (e.g. under `/etc/pvpn/` or `~/.config/pvpn/`). The `init` command should create/update these in a modular fashion, so `pvpn init --proton` only touches VPN-related settings, etc. Later commands (`connect`) will read these. This design ensures users can easily re-run `init` to change one component without losing others.
 
@@ -241,7 +207,7 @@ The CLI tool must manage **WireGuard-based** VPN connections via ProtonVPN and i
 
 - **Best practices:** Follow standard CLI design: clear help, sane defaults, and safe error handling. For example, report if a requested country has no servers or if NAT-PMP fails. Keep services (qBittorrent) idempotent – e.g. do not reset the port if reconnection yields the same mapping. Logging actions to a file can aid troubleshooting (especially since this is headless). 
 
-In summary, the CLI must fully automate a ProtonVPN+WireGuard setup for Raspberry Pi, including selecting servers, establishing the tunnel, performing NAT-PMP port forwarding, updating qBittorrent, and enforcing optional routing rules. Each feature above is grounded in existing ProtonVPN documentation and community examples ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=Step%201%3A%20Download%20OpenVPN%20or,WireGuard%20configuration%20files)) ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows)) ([What is a kill switch? | Proton VPN](https://protonvpn.com/support/what-is-kill-switch?srsltid=AfmBOorRVdj3d2_krw8_3fBHGnUJxi8kftpUM1ngwJFfMdd3Y-jZtv5e#:~:text=A%20kill%20switch%20is%20a,In%20case%20the)) ([ Kali Linux VPN Split Tunneling: How to Route Traffic Securely ](https://cyfuture.cloud/kb/linux/kali-linux-vpn-split-tunneling#:~:text=sudo%20iptables%20,mark%201)) ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Providing%20subcommands%20in%20your%20CLI,ArgumentParser)). With careful design, this tool can be production-ready on Bookworm. 
+In summary, the CLI must fully automate a ProtonVPN+WireGuard setup for Raspberry Pi, including selecting servers, establishing the tunnel, performing NAT-PMP port forwarding, updating qBittorrent, and enforcing optional routing rules. Each feature above is grounded in existing ProtonVPN documentation and community examples ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=Step%201%3A%20Download%20OpenVPN%20or,WireGuard%20configuration%20files)) ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows)) ([What is a kill switch? | Proton VPN](https://protonvpn.com/support/what-is-kill-switch?srsltid=AfmBOorRVdj3d2_krw8_3fBHGnUJxi8kftpUM1ngwJFfMdd3Y-jZtv5e#:~:text=A%20kill%20switch%20is%20a,In%20case%20the)) ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Providing%20subcommands%20in%20your%20CLI,ArgumentParser)). With careful design, this tool can be production-ready on Bookworm.
 
 **Sources:** ProtonVPN support docs and community guides for WireGuard/NAT-PMP ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=Step%201%3A%20Download%20OpenVPN%20or,WireGuard%20configuration%20files)) ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=2,PMP%20%28port%20forwarding%29%20is%20enabled)) ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=5,Enter)); qBittorrent API/forum posts on port updates ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows)) ([API Access and listening port - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=7708#:~:text=Post%20%20%20by%20,Nov%2012%2C%202019%206%3A38%20pm)); kill-switch descriptions ([What is a kill switch? | Proton VPN](https://protonvpn.com/support/what-is-kill-switch?srsltid=AfmBOorRVdj3d2_krw8_3fBHGnUJxi8kftpUM1ngwJFfMdd3Y-jZtv5e#:~:text=A%20kill%20switch%20is%20a,In%20case%20the)); Python `argparse` best practices ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Providing%20subcommands%20in%20your%20CLI,ArgumentParser)) ([Build Command-Line Interfaces With Python's argparse – Real Python](https://realpython.com/command-line-interfaces-python-argparse/#:~:text=Great%2C%20now%20your%20program%20automatically,into%20your%20code)); and real-world examples/scripts ([Supercharge Your headless (Raspberry Pi) VPN with ProtonVPN and WireGuard](https://www.allsubjectsmatter.nl/supercharge-your-headless-raspberry-pi-vpn-with-protonvpn-and-wireguard/#:~:text=checks%20the%20latency%20and%20load,This%20script%20also)) ([Talha Mangarah | How to port forward with Proton VPN and Gluetun (built in NAT-PMP)](https://talhamangarah.com/blog/how-to-port-forward-with-proton-vpn-and-gluetun/#:~:text=was%20using%20extensively%20for%20qBittorrent,but%20you%20may%20still%20find)) ([GitHub - Rafficer/linux-cli-community: Linux command-line client for ProtonVPN. Written in Python.](https://github.com/Rafficer/linux-cli-community#:~:text=Deprecation%20notice)).
 
