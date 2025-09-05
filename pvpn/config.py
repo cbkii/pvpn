@@ -36,24 +36,26 @@ class Config:
         self.network_dns_default = True
         self.network_threshold_default = 60
 
+
         # Monitoring defaults
         self.monitor_interval = 60
         self.monitor_failures = 3
         self.monitor_latency_threshold = 500
 
         # Load existing config if available
+
         try:
-            loaded = Config.load(config_dir)
-            # Overwrite defaults with loaded values
-            self.__dict__.update(loaded.__dict__)
+            if self.ini_path.exists():
+                self._read_ini()
         except Exception as e:
             logging.warning(f"Could not load existing config: {e}")
 
     @classmethod
     def load(cls, config_dir=None):
         """
-        Instantiate and load settings from config.ini.
+        Instantiate a Config, automatically loading from config.ini if present.
         """
+
         cfg = cls(config_dir)
         if cfg.ini_path.exists():
             try:
@@ -90,6 +92,7 @@ class Config:
     return cfg
 
 
+
     def save(self):
         """
         Write the current settings to config.ini.
@@ -115,11 +118,13 @@ class Config:
             'dns_default': str(self.network_dns_default),
             'threshold_default': str(self.network_threshold_default)
         }
+
         self.parser['monitor'] = {
             'interval': str(self.monitor_interval),
             'failures': str(self.monitor_failures),
             'latency_threshold': str(self.monitor_latency_threshold)
         }
+
         # Write file
         try:
             with open(self.ini_path, 'w') as f:
