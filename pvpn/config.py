@@ -1,7 +1,6 @@
 # pvpn/config.py
 
 import configparser
-import json
 import getpass
 import logging
 from pathlib import Path
@@ -10,7 +9,6 @@ class Config:
     """
     Manages loading, saving, and interactive setup of pvpn configuration.
     - Stores settings in ~/.pvpn-cli/pvpn/config.ini
-    - Split-tunnel rules in ~/.pvpn-cli/pvpn/tunnel.json
     """
 
     def __init__(self, config_dir=None):
@@ -19,7 +17,6 @@ class Config:
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         self.ini_path = self.config_dir / "config.ini"
-        self.tunnel_json_path = self.config_dir / "tunnel.json"
         self.parser = configparser.ConfigParser()
 
         # Default settings
@@ -78,10 +75,6 @@ class Config:
                     cfg.network_ks_default = sec.getboolean('ks_default', cfg.network_ks_default)
                     cfg.network_dns_default = sec.getboolean('dns_default', cfg.network_dns_default)
                     cfg.network_threshold_default = sec.getint('threshold_default', cfg.network_threshold_default)
-                # Tunnel JSON path
-                if 'tunnel' in cfg.parser:
-                    sec = cfg.parser['tunnel']
-                    cfg.tunnel_json_path = Path(sec.get('tunnel_json_path', str(cfg.tunnel_json_path)))
             except Exception as e:
                 logging.error(f"Error reading config.ini: {e}")
         return cfg
@@ -110,9 +103,6 @@ class Config:
             'dns_default': str(self.network_dns_default),
             'threshold_default': str(self.network_threshold_default)
         }
-        self.parser['tunnel'] = {
-            'tunnel_json_path': str(self.tunnel_json_path)
-        }
         # Write file
         try:
             with open(self.ini_path, 'w') as f:
@@ -120,35 +110,14 @@ class Config:
         except Exception as e:
             logging.error(f"Cannot write config to {self.ini_path}: {e}")
 
-    def load_tunnel_rules(self):
-        """
-        Load split-tunnel rules from JSON, return defaults on error.
-        """
-        try:
-            if self.tunnel_json_path.exists():
-                return json.loads(self.tunnel_json_path.read_text())
-        except Exception as e:
-            logging.error(f"Failed to load tunnel rules: {e}")
-        return {"processes": [], "pids": [], "ips": []}
-
-    def save_tunnel_rules(self, rules):
-        """
-        Save split-tunnel rules to JSON.
-        """
-        try:
-            with open(self.tunnel_json_path, 'w') as f:
-                json.dump(rules, f, indent=2)
-        except Exception as e:
-            logging.error(f"Failed to save tunnel rules: {e}")
-
-    def interactive_setup(self, proton=False, qb=False, tunnel=False, network=False):
+    def interactive_setup(self, proton=False, qb=False, network=False):
         """
         Run interactive prompts for specified components.
         If no flags, configure all.
         """
         # Enable all if none specified
-        if not any([proton, qb, tunnel, network]):
-            proton = qb = tunnel = network = True
+        if not any([proton, qb, network]):
+            proton = qb = network = True
 
         # ProtonVPN configuration
         if proton:
@@ -171,12 +140,6 @@ class Config:
             self.qb_pass = getpass.getpass("WebUI password: ") or self.qb_pass
             port = input(f"Listen port [{self.qb_port}]: ") or str(self.qb_port)
             self.qb_port = int(port)
-
-        # Split-tunnel configuration
-        if tunnel:
-            print("=== Split-Tunnel Configuration ===")
-            path = input(f"Tunnel JSON path [{self.tunnel_json_path}]: ") or str(self.tunnel_json_path)
-            self.tunnel_json_path = Path(path)
 
         # Network defaults configuration
         if network:
