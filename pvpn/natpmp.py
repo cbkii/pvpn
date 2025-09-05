@@ -7,10 +7,12 @@ then periodically refreshes the lease.
 """
 
 import os
+import re
 import subprocess
 import threading
 import time
 import logging
+from pathlib import Path
 
 from pvpn.config import Config
 from pvpn.utils import run_cmd, check_root
@@ -52,6 +54,38 @@ def _request_mapping(gateway: str, internal_port: int) -> int:
         logging.error(f"Unexpected error calling natpmpc: {e}")
     return 0
 
+
+def _parse_port_from_log(log_path: str) -> int:
+    """Scan the pvpn log for a 'Port pair' entry and return the public port."""
+    try:
+        if not os.path.exists(log_path):
+            return 0
+        text = Path(log_path).read_text().splitlines()
+        for line in reversed(text):
+            m = re.search(r"Port pair\s+(\d+)\s+(\d+)", line)
+            if m:
+                return int(m.group(1))
+    except Exception as e:
+        logging.error(f"Failed to parse log {log_path}: {e}")
+    return 0
+
+
+def _parse_port_from_qbittorrent_log() -> int:
+    """Search qBittorrent's log for a port mapping line."""
+    try:
+        log_path = Path.home() / ".local" / "share" / "qBittorrent" / "logs" / "qbittorrent.log"
+        if not log_path.is_file():
+            return 0
+        lines = log_path.read_text().splitlines()
+        for line in reversed(lines):
+            if "port" in line.lower():
+                parts = [p for p in line.split() if p.isdigit()]
+                if parts:
+                    return int(parts[0])
+    except Exception as e:
+        logging.error(f"Failed to parse qBittorrent log: {e}")
+    return 0
+
 def start_forward(iface: str) -> int:
     """
     Initiate NAT-PMP mapping for the configured qBittorrent port,
@@ -72,6 +106,16 @@ def start_forward(iface: str) -> int:
         return 0
 
     pub_port = _request_mapping(gateway, internal_port)
+    if not pub_port:
+        # Attempt fallback by parsing pvpn.log for 'Port pair'
+        log_path = os.path.join(cfg.config_dir, "pvpn.log")
+        pub_port = _parse_port_from_log(log_path)
+        if pub_port:
+            logging.info(f"Recovered NAT-PMP port {pub_port} from logs")
+    if not pub_port:
+        pub_port = _parse_port_from_qbittorrent_log()
+        if pub_port:
+            logging.info(f"Recovered NAT-PMP port {pub_port} from qBittorrent logs")
     if not pub_port:
         logging.error("Initial NAT-PMP mapping failed")
         return 0

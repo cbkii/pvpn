@@ -196,10 +196,13 @@ def connect(cfg: Config, args):
 
     from pvpn.natpmp import start_forward
     pub_port = start_forward(iface)
+    if not pub_port:
+        logging.error("NAT-PMP port forwarding failed")
+        print("❌ NAT-PMP port forwarding failed")
+        sys.exit(1)
 
     from pvpn.qbittorrent import update_port
     update_port(cfg, pub_port)
-
     print(f"✅ Connected: {server['Name']} on {iface}, forwarded port {pub_port}")
 
 def disconnect(cfg: Config, args):
