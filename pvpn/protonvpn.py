@@ -6,6 +6,7 @@ import json
 import time
 import subprocess
 import logging
+import re
 import requests
 
 from pvpn.config import Config
@@ -14,6 +15,8 @@ from pvpn.utils import check_root
 LOGIN_URL = "https://account.protonvpn.com/api/v4/auth/login"
 SERVERS_URL = "https://api.protonvpn.ch/vpn/logicals"
 WG_DIR = "wireguard"
+
+PING_RE = re.compile(r"min/avg/max/(?:mdev|stddev) = [\d.]+/([\d.]+)/")
 
 def login(cfg: Config) -> str:
     """
@@ -52,7 +55,8 @@ def load_token(cfg: Config) -> str:
     session_file = os.path.join(cfg.session_dir, "token.json")
     if os.path.exists(session_file):
         try:
-            data = json.loads(open(session_file).read())
+            with open(session_file) as f:
+                data = json.load(f)
             if time.time() - data.get("timestamp", 0) < 23 * 3600:
                 return data.get("token")
             logging.info("ProtonVPN token expired; re-authenticating")
@@ -104,10 +108,14 @@ def select_fastest(servers, method="ping", cutoff=None):
                 out = subprocess.check_output(
                     ["ping", "-c", "2", "-W", "1", ip],
                     stderr=subprocess.DEVNULL,
-                    timeout=5
-                ).decode()
-                stats = next((l for l in out.splitlines() if "rtt min/avg" in l), "")
-                val = float(stats.split("/")[4]) if stats else float("inf")
+                    timeout=5,
+                    text=True,
+                )
+                match = PING_RE.search(out)
+                if not match:
+                    logging.debug(f"Unexpected ping output for {ip}: {out}")
+                    continue
+                val = float(match.group(1))
             except subprocess.TimeoutExpired:
                 logging.warning(f"Ping to {ip} timed out")
                 continue

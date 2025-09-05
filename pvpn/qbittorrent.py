@@ -39,15 +39,18 @@ def update_port(cfg: Config, new_port: int):
         session = requests.Session()
         resp = session.post(
             f"{cfg.qb_url}/api/v2/auth/login",
-            data={'username': cfg.qb_user, 'password': cfg.qb_pass},
+            data={"username": cfg.qb_user, "password": cfg.qb_pass},
             timeout=10,
         )
         resp.raise_for_status()
+        if resp.text.strip() != "Ok.":
+            logging.error("qBittorrent WebUI login failed")
+            return
 
         prefs = {
-            'listen_port': new_port,
-            'random_port': False,
-            'upnp': False,
+            "listen_port": new_port,
+            "random_port": False,
+            "upnp": False,
         }
         r2 = session.post(
             f"{cfg.qb_url}/api/v2/app/setPreferences",
