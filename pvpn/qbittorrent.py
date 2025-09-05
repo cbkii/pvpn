@@ -10,10 +10,9 @@ import time
 import logging
 import requests
 import subprocess
-from pathlib import Path
 
 from pvpn.config import Config
-from pvpn.utils import run_cmd, check_root
+from pvpn.utils import run_cmd, check_root, get_invoker_home, chown_to_invoker
 
 # How long to wait before forcing a resume (seconds)
 RESUME_TIMEOUT = 120
@@ -72,8 +71,8 @@ def _config_file_update(new_port: int):
     except Exception as e:
         logging.warning(f"Could not stop qbittorrent-nox: {e}")
 
-    # Edit the config file
-    conf_path = Path.home() / ".config" / "qBittorrent" / "qBittorrent.conf"
+    # Edit the config file located in the invoking user's home directory.
+    conf_path = get_invoker_home() / ".config" / "qBittorrent" / "qBittorrent.conf"
     if not conf_path.is_file():
         logging.error(f"qBittorrent config not found: {conf_path}")
     else:
@@ -86,6 +85,7 @@ def _config_file_update(new_port: int):
                 else:
                     out.append(line)
             conf_path.write_text("\n".join(out))
+            chown_to_invoker(conf_path)
             logging.info(f"Set Connection\\Port={new_port} in {conf_path}")
         except Exception as e:
             logging.error(f"Failed to edit {conf_path}: {e}")

@@ -5,6 +5,10 @@ Utility functions for pvpn modules:
 - run_cmd: execute shell commands safely
 - backup_file / restore_file: file backup and restore operations
 - check_root: ensure script runs with root privileges
+- get_invoker_home: resolve the real user's home directory even when run
+  via sudo
+- chown_to_invoker: ensure files/directories created under sudo remain
+  owned by the invoking user
 """
 
 import subprocess
@@ -12,6 +16,8 @@ import logging
 import shutil
 import os
 import sys
+from pathlib import Path
+import pwd
 
 def run_cmd(cmd: str, capture_output: bool = True) -> str:
     """
@@ -65,4 +71,54 @@ def check_root():
     if os.geteuid() != 0:
         logging.error("Root privileges required. Please run as root or via sudo.")
         sys.exit(1)
+
+
+def get_invoker_home() -> Path:
+    """Return the home directory of the user invoking pvpn.
+
+    pvpn commands generally require root via ``sudo``.  Using
+    :func:`Path.home` in such cases resolves to ``/root`` which causes
+    configuration files to be written to the wrong location.  This helper
+    returns the original user's home directory when run under ``sudo`` so
+    that configuration is consistently stored in the invoking user's
+    environment.
+
+    Returns:
+        Path: Path object pointing to the preferred home directory.
+    """
+
+    home = Path.home()
+    if os.geteuid() == 0 and os.environ.get("SUDO_USER"):
+        try:
+            home = Path(pwd.getpwnam(os.environ["SUDO_USER"]).pw_dir)
+        except KeyError:
+            # Fall back to root's home if lookup fails
+            pass
+    return home
+
+
+def chown_to_invoker(path: Path | str):
+    """Ensure *path* is owned by the user invoking pvpn.
+
+    When pvpn runs under ``sudo``, files created in the invoking user's
+    home would otherwise be owned by root.  This helper uses ``SUDO_UID``
+    and ``SUDO_GID`` to restore ownership so that subsequent non-root
+    processes (e.g. qbittorrent) can access them.
+
+    The function is a no-op if not running as root or if the sudo
+    environment variables are absent.
+    """
+
+    if os.geteuid() != 0:
+        return
+
+    uid = os.environ.get("SUDO_UID")
+    gid = os.environ.get("SUDO_GID")
+    if not uid or not gid:
+        return
+
+    try:
+        os.chown(str(path), int(uid), int(gid))
+    except Exception as e:
+        logging.debug(f"Failed to chown {path} to invoking user: {e}")
 
