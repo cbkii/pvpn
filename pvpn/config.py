@@ -4,6 +4,10 @@ import configparser
 import json
 import getpass
 import logging
+import os
+import base64
+import hashlib
+from urllib.parse import urlparse
 from pathlib import Path
 
 class Config:
@@ -141,6 +145,47 @@ class Config:
         except Exception as e:
             logging.error(f"Failed to save tunnel rules: {e}")
 
+    @staticmethod
+    def _qb_pass_hash(password: str) -> str:
+        """
+        Generate qBittorrent WebUI PBKDF2 password hash.
+        """
+        salt = os.urandom(16)
+        key = hashlib.pbkdf2_hmac('sha512', password.encode(), salt, 100000, dklen=64)
+        return f"{base64.b64encode(salt).decode()}:{base64.b64encode(key).decode()}"
+
+    def _enable_qb_webui(self):
+        """
+        Ensure qBittorrent's WebUI is enabled locally with stored credentials.
+        Requires a manual restart of qbittorrent-nox to take effect.
+        """
+        conf_path = Path.home() / ".config" / "qBittorrent" / "qBittorrent.conf"
+        if not conf_path.exists():
+            logging.warning(f"qBittorrent config not found: {conf_path}")
+            return
+
+        parser = configparser.RawConfigParser()
+        parser.optionxform = str
+        parser.read(conf_path)
+        if 'Preferences' not in parser:
+            parser.add_section('Preferences')
+
+        url = urlparse(self.qb_url)
+        host = url.hostname or '127.0.0.1'
+        port = url.port or 8080
+
+        pref = parser['Preferences']
+        pref['WebUI\\Enabled'] = 'true'
+        pref['WebUI\\Address'] = host
+        pref['WebUI\\Port'] = str(port)
+        pref['WebUI\\Username'] = self.qb_user
+        if self.qb_pass:
+            pref['WebUI\\Password_PBKDF2'] = self._qb_pass_hash(self.qb_pass)
+
+        with open(conf_path, 'w') as f:
+            parser.write(f)
+        logging.info(f"Enabled qBittorrent WebUI in {conf_path}. Manual restart required.")
+
     def interactive_setup(self, proton=False, qb=False, tunnel=False, network=False):
         """
         Run interactive prompts for specified components.
@@ -167,10 +212,17 @@ class Config:
             en = input(f"Enable WebUI API (true/false) [{self.qb_enable}]: ") or str(self.qb_enable)
             self.qb_enable = en.lower() in ("true", "1", "yes", "y")
             self.qb_url = input(f"WebUI URL [{self.qb_url}]: ") or self.qb_url
+            parsed = urlparse(self.qb_url)
+            if parsed.hostname not in ("127.0.0.1", "localhost"):
+                print("Only local WebUI supported; forcing http://127.0.0.1:8080")
+                self.qb_url = "http://127.0.0.1:8080"
             self.qb_user = input(f"WebUI username [{self.qb_user}]: ") or self.qb_user
             self.qb_pass = getpass.getpass("WebUI password: ") or self.qb_pass
             port = input(f"Listen port [{self.qb_port}]: ") or str(self.qb_port)
             self.qb_port = int(port)
+            if self.qb_enable:
+                self._enable_qb_webui()
+                print("qBittorrent WebUI configured. Restart qbittorrent-nox once to apply.")
 
         # Split-tunnel configuration
         if tunnel:

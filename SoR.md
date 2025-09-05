@@ -109,8 +109,8 @@ pvpn connect \
        -d '{"listen_port":PORT,"upnp":false,"random_port":false}' \
        ${QB_URL}/api/v2/app/setPreferences
      ```  
-   - Else stop `qbittorrent-nox`, edit `~/.config/qBittorrent/qBittorrent.conf`, set `Connection\Port=PORT`, restart.  
-   - After restart, wait ≤2 min; if no active downloads, call WebUI `/torrents/resumeAll` or `qbittorrentapi` to resume.
+   - Else log a warning and skip the port update.
+   - Afterward, wait ≤2 min; if no active downloads, call WebUI `/torrents/resumeAll` or `qbittorrentapi` to resume.
 
 ### 4.2 `pvpn disconnect` (`pvpn d`)
 
@@ -205,11 +205,11 @@ The CLI tool must manage **WireGuard-based** VPN connections via ProtonVPN and i
 
 - **Protocol support:** After the WireGuard tunnel is up, the tool must request port mappings from ProtonVPN’s server using **NAT-PMP**. ProtonVPN’s WireGuard servers support NAT-PMP only on P2P-flagged servers ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=Step%201%3A%20Download%20OpenVPN%20or,WireGuard%20configuration%20files)) ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=2,PMP%20%28port%20forwarding%29%20is%20enabled)). To leverage this, the CLI should run a NAT-PMP client (e.g. `natpmpc` or a Python NAT-PMP library) to request a random port on the server and map it to the local qBittorrent port. For example, Proton’s docs show installing `natpmpc` and looping it to renew mappings periodically ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=5,Enter)). The tool should do similar: use `natpmpc` (or a Python equivalent like [py-natpmp]) to add a port mapping, and continuously refresh it so it does not expire ([How to manually set up port forwarding | Proton VPN](https://protonvpn.com/support/port-forwarding-manual-setup?srsltid=AfmBOorzBdAX1CcLOLgh35Sl9GNJMIT0JR8DRqTdwJP-UbC2deWr1VZC#:~:text=5,Enter)). If the user’s plan or server selection disallows NAT-PMP, the tool should detect and report that port forwarding is unavailable.
 
-- **qBittorrent port update:** Once a public port is obtained, the CLI must update qBittorrent-nox’s listening port to match. If the Web UI (API) is enabled for localhost, use its `/api/v2/app/setPreferences` endpoint. For instance:  
+- **qBittorrent port update:** Once a public port is obtained, the CLI must update qBittorrent-nox’s listening port to match using the Web UI (API) bound to localhost:
   ```bash
   curl -X POST -d '{"listen_port": NEW_PORT}' http://localhost:WEBUI_PORT/api/v2/app/setPreferences
-  ```  
-  as shown in qBittorrent’s forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows)). (The `random_port` option should be disabled via a similar API call.) If the Web UI is not available (or locked down), fall back to editing the qBittorrent configuration file (e.g. `~/.config/qBittorrent/qBittorrent.conf`), replacing the `Connection\Port=` entry and restarting the daemon ([API Access and listening port - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=7708#:~:text=Post%20%20%20by%20,Nov%2012%2C%202019%206%3A38%20pm)). In either case, ensure qBittorrent’s UPnP/NAT-PMP feature is disabled to avoid conflicts with the VPN’s port-forward.
+  ```
+  as shown in qBittorrent’s forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows)). The `random_port` option should be disabled via a similar API call. If the Web UI is not available (or locked down), the port update is skipped. Ensure qBittorrent’s UPnP/NAT-PMP feature is disabled to avoid conflicts with the VPN’s port-forward.
 
 ## Kill-Switch and Routing Controls
 
@@ -221,9 +221,7 @@ The CLI tool must manage **WireGuard-based** VPN connections via ProtonVPN and i
 
 ## qBittorrent-nox Integration
 
-- **Web UI API usage:** If the user enables qBittorrent’s Web UI (bound to localhost), the CLI should use the WebAPI to update settings. After obtaining a forwarded port, send an HTTP POST to `/api/v2/app/setPreferences` with JSON `{"listen_port": PORT}` (as demonstrated by the qBittorrent forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows))). The user should configure the Web UI to allow localhost updates (e.g. enable “Bypass authentication for local clients” or set a known token). This approach avoids restarting qBittorrent.
-
-- **Config file fallback:** If the WebUI is not active, the tool must edit qBittorrent’s config directly. For example, stop `qbittorrent-nox`, open its config file (often `~/.config/qBittorrent/qBittorrent.conf`), change `Connection\Port=...` to the new port, and restart. (This technique was suggested by qBittorrent developers when APIs fail ([API Access and listening port - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=7708#:~:text=Post%20%20%20by%20,Nov%2012%2C%202019%206%3A38%20pm)).) The CLI should locate the config automatically or accept it via an option.
+- **Web UI API usage:** qBittorrent’s Web UI (bound to localhost) is required for port updates. After obtaining a forwarded port, send an HTTP POST to `/api/v2/app/setPreferences` with JSON `{"listen_port": PORT}` (as demonstrated by the qBittorrent forums ([Is there a way to change the torrenting port without restarting QBittorrent? - qBittorrent official forums](https://forum.qbittorrent.org/viewtopic.php?t=11385#:~:text=Hi%20i%20do%20change%20the,port%20as%20follows))). The WebUI must allow localhost updates (e.g. enable “Bypass authentication for local clients” or set a known token). If the WebUI is disabled, port updates are skipped. Enabling the WebUI may require a one-time manual restart of `qbittorrent-nox`.
 
 ## Command-Line Interface Design
 
