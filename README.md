@@ -28,13 +28,12 @@
 - **WireGuard VPN**: automatically download & rotate ProtonVPN WireGuard configs  
 - **Server Filters**: by country (`--cc`), SecureCore (`--sc`), P2P (`--p2p`), load threshold (`--threshold`)  
 - **Fastest-by-RTT**: choose lowest-latency via ICMP (`ping`) or ProtonVPN API (`--fastest api`), or early exit under `--latency-cutoff`  
-- **NAT-PMP Port Forwarding**: `natpmpc`-based mapping & automatic lease refresh  
-- **qBittorrent-nox Integration**: sync listen-port via WebUI API or config-file fallback; resume stalled torrents  
-- **Kill-Switch**: reversible iptables DROP of all non-VPN traffic (`--ks`)
-- **Split-Tunnel**: bypass VPN for specific processes, PIDs, or IPs (`pvpn tunnel`)
-- **Modular init**: `pvpn init [--proton|--qb|--tunnel|--network]` for targeted or full setup
+- **NAT-PMP Port Forwarding**: `natpmpc`-based mapping & automatic lease refresh 
+- **qBittorrent-nox Integration**: sync listen-port via WebUI API; resume stalled torrents
+- **Kill-Switch**: reversible iptables DROP of all non-VPN traffic (`--ks`)  
+- **Split-Tunnel**: bypass VPN for specific processes, PIDs, or IPs (`pvpn tunnel`)  
+- **Modular init**: `pvpn init [--proton|--qb|--tunnel|--network]` for targeted or full setup  
 - **Background Monitor**: auto-reconnect on repeated ping failures or high latency
-
 
 ---
 
@@ -101,6 +100,9 @@ pvpn init --network   # only DNS & kill-switch defaults
 This will populate:
 
 - **`~/.pvpn-cli/pvpn/config.ini`**
+- **`~/.pvpn-cli/pvpn/tunnel.json`**
+
+If qBittorrent's WebUI was not previously enabled, `pvpn init --qb` will configure it for localhost and store your credentials. **Restart the `qbittorrent-nox` service once** after setup so the WebUI becomes active. Subsequent port changes are applied via the API without interrupting downloads. If you later disable the WebUI (`enable = false`), pvpn will warn and skip listen-port updates.
 
 ### 2. Example `config.ini`
 
