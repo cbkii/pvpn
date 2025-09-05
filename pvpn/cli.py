@@ -11,7 +11,7 @@ def check_dependencies():
     """
     Warn if required system tools are missing.
     """
-    required = ["wg", "ip", "iptables", "natpmpc", "ping", "curl", "jq"]
+    required = ["wg", "ip", "iptables", "natpmpc", "ping", "curl"]
     missing = [tool for tool in required if shutil.which(tool) is None]
     if missing:
         print(f"Warning: Missing system tools: {', '.join(missing)}. Some features may not work.")

@@ -102,7 +102,6 @@ def bring_down():
         logging.error(f"Failed to list interfaces: {e}")
         return
 
-
     for line in output.splitlines():
         m = re.search(r':\s*(wgp[a-z]{2}[0-9a-z]+):', line)
         if m:

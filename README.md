@@ -49,7 +49,7 @@
   sudo apt update && sudo apt install -y \
     python3 python3-venv python3-pip \
     wireguard-tools iproute2 iptables natpmpc \
-    ping curl jq
+    ping curl
   ```  
 - **Runtime Python Dependencies:**  
   ```text
@@ -316,8 +316,8 @@ Below is a **complete, unambiguous Statement of Requirements** for `pvpn`—a he
 
 - **OS:** Raspberry Pi OS Bookworm (Debian 12), headless (no desktop).  
 - **Language & Tools:**  
-  - **Python 3.10+** (CLI via `argparse` or `click`)  
-  - Shell tools: `wg`, `ip` (iproute2), `iptables` (or `nftables`), `natpmpc`, `ping`, `curl`, `jq`  
+  - **Python 3.10+** (CLI via `argparse` or `click`)
+  - Shell tools: `wg`, `ip` (iproute2), `iptables` (or `nftables`), `natpmpc`, `ping`, `curl`
   - **qBittorrent-nox** with optional WebUI API  
 
 ---

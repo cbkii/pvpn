@@ -16,7 +16,7 @@ apt-get update
 apt-get install -y \
   python3 python3-venv python3-pip \
   wireguard-tools iproute2 iptables natpmpc \
-  iputils-ping curl jq ca-certificates >/tmp/apt.log && tail -n 20 /tmp/apt.log
+  iputils-ping curl ca-certificates >/tmp/apt.log && tail -n 20 /tmp/apt.log
 
 mkdir -p "$INSTALL_DIR"
 if [[ ! -d "$VENV_DIR" ]]; then
