@@ -5,7 +5,7 @@ import argparse
 import sys
 import shutil
 from pvpn.config import Config
-from pvpn import protonvpn, routing, wireguard, natpmp, qbittorrent
+from pvpn import protonvpn, wireguard, natpmp, qbittorrent
 
 def check_dependencies():
     """
@@ -27,7 +27,6 @@ def build_parser():
     init = sub.add_parser("init", help="Interactive setup or configure components")
     init.add_argument("--proton", action="store_true", help="Configure ProtonVPN credentials/settings")
     init.add_argument("--qb", action="store_true", help="Configure qBittorrent-WebUI settings")
-    init.add_argument("--tunnel", action="store_true", help="Configure split-tunnel defaults")
     init.add_argument("--network", action="store_true", help="Configure DNS & kill-switch defaults")
     init.set_defaults(cmd="init")
 
@@ -69,18 +68,6 @@ def build_parser():
     lst.add_argument("-t", "--threshold", type=int,
                      help="Maximum server load percentage")
 
-    # tunnel
-    tnl = sub.add_parser("tunnel", help="Manage split-tunnel rules")
-    tnl.set_defaults(cmd="tunnel")
-    grp = tnl.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--add", action="store_true")
-    grp.add_argument("--rm", action="store_true")
-    tnl.add_argument("--process", help="Binary name to tunnel")
-    tnl.add_argument("--pid", type=int, help="PID to tunnel")
-    tnl.add_argument("--ip", help="IP or CIDR to tunnel")
-    tnl.add_argument("--edit", action="store_true",
-                     help="Edit split-tunnel JSON manually")
-
     return p
 
 def main():
@@ -94,7 +81,6 @@ def main():
         cfg.interactive_setup(
             proton=args.proton,
             qb=args.qb,
-            tunnel=args.tunnel,
             network=args.network
         )
 
@@ -109,9 +95,6 @@ def main():
 
     elif cmd == "list":
         protonvpn.list_servers(cfg, args)
-
-    elif cmd == "tunnel":
-        routing.manage_tunnel(cfg, args)
 
     else:
         parser.print_help()

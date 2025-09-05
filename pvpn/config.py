@@ -14,7 +14,6 @@ class Config:
     """
     Manages loading, saving, and interactive setup of pvpn configuration.
     - Stores settings in ~/.pvpn-cli/pvpn/config.ini
-    - Split-tunnel rules in ~/.pvpn-cli/pvpn/tunnel.json
     """
 
     def __init__(self, config_dir=None):
@@ -23,7 +22,6 @@ class Config:
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         self.ini_path = self.config_dir / "config.ini"
-        self.tunnel_json_path = self.config_dir / "tunnel.json"
         self.parser = configparser.ConfigParser()
 
         # Default settings
@@ -43,19 +41,26 @@ class Config:
         self.network_dns_default = True
         self.network_threshold_default = 60
 
+
+        # Monitoring defaults
+        self.monitor_interval = 60
+        self.monitor_failures = 3
+        self.monitor_latency_threshold = 500
+
         # Load existing config if available
+
         try:
-            loaded = Config.load(config_dir)
-            # Overwrite defaults with loaded values
-            self.__dict__.update(loaded.__dict__)
+            if self.ini_path.exists():
+                self._read_ini()
         except Exception as e:
             logging.warning(f"Could not load existing config: {e}")
 
     @classmethod
     def load(cls, config_dir=None):
         """
-        Instantiate and load settings from config.ini.
+        Instantiate a Config, automatically loading from config.ini if present.
         """
+
         cfg = cls(config_dir)
         if cfg.ini_path.exists():
             try:
@@ -76,19 +81,22 @@ class Config:
                     cfg.qb_user = sec.get('user', cfg.qb_user)
                     cfg.qb_pass = sec.get('pass', cfg.qb_pass)
                     cfg.qb_port = sec.getint('port', cfg.qb_port)
+
                 # Network defaults
                 if 'network' in cfg.parser:
                     sec = cfg.parser['network']
                     cfg.network_ks_default = sec.getboolean('ks_default', cfg.network_ks_default)
                     cfg.network_dns_default = sec.getboolean('dns_default', cfg.network_dns_default)
                     cfg.network_threshold_default = sec.getint('threshold_default', cfg.network_threshold_default)
-                # Tunnel JSON path
-                if 'tunnel' in cfg.parser:
-                    sec = cfg.parser['tunnel']
-                    cfg.tunnel_json_path = Path(sec.get('tunnel_json_path', str(cfg.tunnel_json_path)))
-            except Exception as e:
-                logging.error(f"Error reading config.ini: {e}")
-        return cfg
+                # Monitor defaults
+                if 'monitor' in cfg.parser:
+                    sec = cfg.parser['monitor']
+                    cfg.monitor_interval = sec.getint('interval', cfg.monitor_interval)
+                    cfg.monitor_failures = sec.getint('failures', cfg.monitor_failures)
+                    cfg.monitor_latency_threshold = sec.getint('latency_threshold', cfg.monitor_latency_threshold)
+    return cfg
+
+
 
     def save(self):
         """
@@ -109,20 +117,26 @@ class Config:
             'pass': self.qb_pass,
             'port': str(self.qb_port)
         }
+
         self.parser['network'] = {
             'ks_default': str(self.network_ks_default),
             'dns_default': str(self.network_dns_default),
             'threshold_default': str(self.network_threshold_default)
         }
-        self.parser['tunnel'] = {
-            'tunnel_json_path': str(self.tunnel_json_path)
+
+        self.parser['monitor'] = {
+            'interval': str(self.monitor_interval),
+            'failures': str(self.monitor_failures),
+            'latency_threshold': str(self.monitor_latency_threshold)
         }
+
         # Write file
         try:
             with open(self.ini_path, 'w') as f:
                 self.parser.write(f)
         except Exception as e:
             logging.error(f"Cannot write config to {self.ini_path}: {e}")
+
 
     def load_tunnel_rules(self):
         """
@@ -186,14 +200,13 @@ class Config:
             parser.write(f)
         logging.info(f"Enabled qBittorrent WebUI in {conf_path}. Manual restart required.")
 
-    def interactive_setup(self, proton=False, qb=False, tunnel=False, network=False):
         """
         Run interactive prompts for specified components.
         If no flags, configure all.
         """
         # Enable all if none specified
-        if not any([proton, qb, tunnel, network]):
-            proton = qb = tunnel = network = True
+        if not any([proton, qb, network]):
+            proton = qb = network = True
 
         # ProtonVPN configuration
         if proton:
@@ -223,12 +236,6 @@ class Config:
             if self.qb_enable:
                 self._enable_qb_webui()
                 print("qBittorrent WebUI configured. Restart qbittorrent-nox once to apply.")
-
-        # Split-tunnel configuration
-        if tunnel:
-            print("=== Split-Tunnel Configuration ===")
-            path = input(f"Tunnel JSON path [{self.tunnel_json_path}]: ") or str(self.tunnel_json_path)
-            self.tunnel_json_path = Path(path)
 
         # Network defaults configuration
         if network:
