@@ -5,7 +5,7 @@ import argparse
 import sys
 import shutil
 from pvpn.config import Config
-from pvpn import protonvpn, wireguard, natpmp, qbittorrent
+from pvpn import protonvpn
 
 def check_dependencies():
     """

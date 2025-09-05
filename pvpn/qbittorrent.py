@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 from pvpn.config import Config
+from pvpn.utils import run_cmd
 
 # How long to wait before forcing a resume (seconds)
 RESUME_TIMEOUT = 120
@@ -91,7 +92,7 @@ def get_listen_port(cfg: Config) -> int:
     try:
         conf_path = Path.home() / ".config" / "qBittorrent" / "qBittorrent.conf"
         parser = configparser.RawConfigParser()
-        parser.optionxform = str
+        parser.optionxform = lambda opt: opt  # type: ignore[assignment]
         parser.read(conf_path)
         if 'Preferences' in parser:
             pref = parser['Preferences']
@@ -151,3 +152,21 @@ def _resume_torrents(cfg: Config, session: requests.Session):
         logging.info("Sent resumeAll to qBittorrent WebUI")
     except Exception as e:
         logging.error(f"Failed to resume torrents: {e}")
+
+
+def start_service():
+    """Start the qbittorrent-nox systemd service."""
+    try:
+        run_cmd(["systemctl", "start", "qbittorrent-nox"], capture_output=False)
+        logging.info("Started qbittorrent-nox service")
+    except Exception as e:
+        logging.error(f"Failed to start qbittorrent-nox: {e}")
+
+
+def stop_service():
+    """Stop the qbittorrent-nox systemd service."""
+    try:
+        run_cmd(["systemctl", "stop", "qbittorrent-nox"], capture_output=False)
+        logging.info("Stopped qbittorrent-nox service")
+    except Exception as e:
+        logging.error(f"Failed to stop qbittorrent-nox: {e}")

@@ -7,6 +7,7 @@ Manage routing controls:
 
 import os
 import logging
+import subprocess
 
 from pvpn.utils import run_cmd, check_root
 
@@ -19,10 +20,16 @@ def enable_killswitch(iface: str):
     check_root()
     bak = "/etc/pvpn-iptables.bak"
     try:
-        run_cmd(f"iptables-save > {bak}", capture_output=False)
-        run_cmd("iptables -P OUTPUT DROP", capture_output=False)
-        run_cmd(f"iptables -A OUTPUT -o {iface} -j ACCEPT", capture_output=False)
-        run_cmd("iptables -A OUTPUT -o lo -j ACCEPT", capture_output=False)
+        result = subprocess.run(["iptables-save"], check=True, stdout=subprocess.PIPE)
+        with open(bak, "w") as f:
+            f.write(result.stdout.decode())
+        run_cmd(["iptables", "-P", "OUTPUT", "DROP"], capture_output=False)
+        run_cmd(["iptables", "-A", "OUTPUT", "-o", iface, "-j", "ACCEPT"], capture_output=False)
+        run_cmd(["iptables", "-A", "OUTPUT", "-o", "lo", "-j", "ACCEPT"], capture_output=False)
+        run_cmd([
+            "iptables", "-A", "OUTPUT", "-m", "conntrack",
+            "--ctstate", "ESTABLISHED,RELATED", "-j", "ACCEPT",
+        ], capture_output=False)
         logging.info("Kill-switch enabled")
     except Exception as e:
         logging.error(f"Failed to enable kill-switch: {e}")
@@ -35,7 +42,8 @@ def disable_killswitch():
     bak = "/etc/pvpn-iptables.bak"
     if os.path.exists(bak):
         try:
-            run_cmd(f"iptables-restore < {bak}", capture_output=False)
+            with open(bak) as f:
+                run_cmd(["iptables-restore"], capture_output=False, input_text=f.read())
             logging.info("Kill-switch disabled, iptables restored")
         except Exception as e:
             logging.error(f"Failed to restore iptables: {e}")
@@ -46,7 +54,7 @@ def disable_killswitch():
 def killswitch_status() -> bool:
     """Return True if the kill-switch appears active."""
     try:
-        rules = run_cmd("iptables -S OUTPUT")
+        rules = run_cmd(["iptables", "-S", "OUTPUT"])
         if "-P OUTPUT DROP" in rules and os.path.exists("/etc/pvpn-iptables.bak"):
             return True
     except Exception as e:
