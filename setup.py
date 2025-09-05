@@ -10,7 +10,7 @@ setup(
     author_email="you@example.com",
     packages=find_packages(),
     install_requires=[
-        "requests>=2.25.0"
+        "requests>=2.28,<3.0"
     ],
     entry_points={
         "console_scripts": [
