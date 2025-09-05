@@ -132,3 +132,30 @@ def status():
         print(open(RESOLV_CONF).read())
     except Exception as e:
         logging.error(f"Failed to read {RESOLV_CONF}: {e}")
+
+
+def get_active_iface() -> str:
+    """Return the first active pvpn-managed WireGuard interface name or an empty string."""
+    try:
+        out = run_cmd("wg show interfaces").strip()
+        for iface in out.split():
+            if iface.startswith("wgp"):
+                return iface
+    except Exception as e:
+        logging.debug(f"Failed to get active WireGuard interface: {e}")
+    return ""
+
+
+def get_dns_servers() -> list:
+    """Return a list of DNS resolvers from /etc/resolv.conf."""
+    servers = []
+    try:
+        with open(RESOLV_CONF) as f:
+            for line in f:
+                if line.strip().startswith("nameserver"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        servers.append(parts[1])
+    except Exception as e:
+        logging.error(f"Failed to read {RESOLV_CONF}: {e}")
+    return servers

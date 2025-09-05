@@ -51,6 +51,17 @@ def disable_killswitch():
     else:
         logging.warning("No iptables backup found; cannot disable kill-switch")
 
+
+def killswitch_status() -> bool:
+    """Return True if the kill-switch appears active."""
+    try:
+        rules = run_cmd("iptables -S OUTPUT")
+        if "-P OUTPUT DROP" in rules and os.path.exists("/etc/pvpn-iptables.bak"):
+            return True
+    except Exception as e:
+        logging.error(f"Failed to check kill-switch: {e}")
+    return False
+
 def _ensure_chain():
     """
     Ensure the custom mangle chain exists and is hooked into OUTPUT.

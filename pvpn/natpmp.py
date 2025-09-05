@@ -87,3 +87,12 @@ def start_forward(iface: str) -> int:
     t.start()
 
     return pub_port
+
+
+def get_public_port(iface: str, internal_port: int) -> int:
+    """Query the current NAT-PMP mapping and return the public port."""
+    try:
+        gateway = _get_vpn_gateway(iface)
+    except Exception:
+        return 0
+    return _request_mapping(gateway, internal_port)
