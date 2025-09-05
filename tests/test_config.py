@@ -27,15 +27,3 @@ def test_config_save_load(tmp_path):
     assert cfg2.monitor_failures == 5
     assert cfg2.monitor_latency_threshold == 800
 
-def test_tunnel_rules(tmp_path):
-    cfg_dir = tmp_path / "cfg"
-    cfg = Config(config_dir=str(cfg_dir))
-    # Initially empty
-    rules = cfg.load_tunnel_rules()
-    assert rules == {"processes": [], "pids": [], "ips": []}
-
-    # Save some rules
-    new_rules = {"processes": ["qbittorrent-nox"], "pids": [999], "ips": ["1.2.3.4"]}
-    cfg.save_tunnel_rules(new_rules)
-    loaded = cfg.load_tunnel_rules()
-    assert loaded == new_rules

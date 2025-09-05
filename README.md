@@ -1,6 +1,6 @@
 # pvpn
 
-**Headless ProtonVPN WireGuard CLI** with built-in qBittorrent-nox port-forwarding, reversible kill-switch, and split-tunnel support—designed for Raspberry Pi OS Bookworm (Debian 12) on a Pi 5.
+**Headless ProtonVPN WireGuard CLI** with built-in qBittorrent-nox port-forwarding and reversible kill-switch—designed for Raspberry Pi OS Bookworm (Debian 12) on a Pi 5.
 
 ---
 
@@ -16,7 +16,6 @@
    - [disconnect / d](#pvpn-disconnect)  
    - [status / s](#pvpn-status)  
    - [list](#pvpn-list)  
-   - [tunnel](#pvpn-tunnel)  
    - [Command & Flag Aliases](#command--flag-aliases)
 6. [Logging & Verbose](#logging--verbose)  
 7. [Testing](#testing)  
@@ -31,10 +30,11 @@
 - **Fastest-by-RTT**: choose lowest-latency via ICMP (`ping`) or ProtonVPN API (`--fastest api`), or early exit under `--latency-cutoff`  
 - **NAT-PMP Port Forwarding**: `natpmpc`-based mapping & automatic lease refresh  
 - **qBittorrent-nox Integration**: sync listen-port via WebUI API or config-file fallback; resume stalled torrents  
-- **Kill-Switch**: reversible iptables DROP of all non-VPN traffic (`--ks`)  
+- **Kill-Switch**: reversible iptables DROP of all non-VPN traffic (`--ks`)
 - **Split-Tunnel**: bypass VPN for specific processes, PIDs, or IPs (`pvpn tunnel`)
 - **Modular init**: `pvpn init [--proton|--qb|--tunnel|--network]` for targeted or full setup
 - **Background Monitor**: auto-reconnect on repeated ping failures or high latency
+
 
 ---
 
@@ -95,14 +95,12 @@ Run `pvpn init` to create or update your configuration files:
 pvpn init
 pvpn init --proton    # only ProtonVPN credentials
 pvpn init --qb        # only qBittorrent settings
-pvpn init --tunnel    # only split-tunnel defaults
 pvpn init --network   # only DNS & kill-switch defaults
 ```
 
 This will populate:
 
-- **`~/.pvpn-cli/pvpn/config.ini`**  
-- **`~/.pvpn-cli/pvpn/tunnel.json`**  
+- **`~/.pvpn-cli/pvpn/config.ini`**
 
 ### 2. Example `config.ini`
 
@@ -158,6 +156,7 @@ section of `config.ini`:
 interval = 60            # seconds between checks
 failures = 3             # consecutive bad pings before reconnect
 latency_threshold = 500  # milliseconds considered too slow
+
 ```
 
 ---
@@ -171,7 +170,7 @@ All commands support `-h/--help` for details.
 Interactive or scoped setup:
 
 ```bash
-pvpn init [--proton] [--qb] [--tunnel] [--network]
+pvpn init [--proton] [--qb] [--network]
 ```
 
 ### `pvpn connect` (`pvpn c`)
@@ -221,30 +220,14 @@ List servers matching filters:
 pvpn list [--cc AU] [--sc] [--p2p] [--fastest ping] [--threshold 60]
 ```
 
-### `pvpn tunnel`
-
-Manage split-tunnel rules:
-
-```bash
-# Add a process bypass
-pvpn tunnel --add --process qbittorrent-nox
-
-# Remove an IP bypass
-pvpn tunnel --rm --ip 203.0.113.45
-
-# Edit manually
-pvpn tunnel --edit
-```
-
 ### Command & Flag Aliases
 
-**Commands:**  
-- `pvpn init`  
-- `pvpn connect` (`pvpn c`)  
-- `pvpn disconnect` (`pvpn d`)  
-- `pvpn status` (`pvpn s`)  
-- `pvpn list`  
-- `pvpn tunnel`  
+**Commands:**
+- `pvpn init`
+- `pvpn connect` (`pvpn c`)
+- `pvpn disconnect` (`pvpn d`)
+- `pvpn status` (`pvpn s`)
+- `pvpn list`
 
 **Flags:**  
 | Long option             | Short alias | Applies to                  |
@@ -259,7 +242,6 @@ pvpn tunnel --edit
 | `--p2p`                 | *(none)*    | `connect`, `list`           |
 | `--proton`              | *(none)*    | `init`                      |
 | `--qb`                  | *(none)*    | `init`                      |
-| `--tunnel`              | *(none)*    | `init`                      |
 | `--network`             | *(none)*    | `init`                      |
 
 
@@ -282,7 +264,7 @@ pytest -q
 ```
 
 - **Unit tests** cover config I/O and CLI parsing.  
-- **Integration test** (mocked) simulates full connect/disconnect/list/tunnel workflow.
+- **Integration test** (mocked) simulates full connect/disconnect/list workflow.
 
 ---
 
