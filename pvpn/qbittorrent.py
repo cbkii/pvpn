@@ -123,3 +123,32 @@ def _resume_torrents(cfg: Config):
         logging.info("Sent resumeAll to qBittorrent WebUI")
     except Exception as e:
         logging.error(f"Failed to resume torrents: {e}")
+
+
+def get_listen_port(cfg: Config) -> int:
+    """Retrieve the current qBittorrent listening port."""
+    if cfg.qb_enable:
+        try:
+            session = requests.Session()
+            resp = session.post(
+                f"{cfg.qb_url}/api/v2/auth/login",
+                data={'username': cfg.qb_user, 'password': cfg.qb_pass},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            pref = session.get(f"{cfg.qb_url}/api/v2/app/preferences", timeout=10)
+            pref.raise_for_status()
+            data = pref.json()
+            port = data.get('listen_port')
+            if isinstance(port, int) and port > 0:
+                return port
+        except Exception as e:
+            logging.warning(f"WebUI API query failed: {e}")
+    conf_path = Path.home() / ".config" / "qBittorrent" / "qBittorrent.conf"
+    try:
+        for line in conf_path.read_text().splitlines():
+            if line.startswith("Connection\\Port="):
+                return int(line.split("=", 1)[1])
+    except Exception as e:
+        logging.debug(f"Failed to read qBittorrent config: {e}")
+    return cfg.qb_port

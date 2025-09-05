@@ -36,7 +36,14 @@ class Config:
         self.network_dns_default = True
         self.network_threshold_default = 60
 
-        # Load existing config if available without recursion
+
+        # Monitoring defaults
+        self.monitor_interval = 60
+        self.monitor_failures = 3
+        self.monitor_latency_threshold = 500
+
+        # Load existing config if available
+
         try:
             if self.ini_path.exists():
                 self._read_ini()
@@ -48,37 +55,43 @@ class Config:
         """
         Instantiate a Config, automatically loading from config.ini if present.
         """
-        return cls(config_dir)
 
-    def _read_ini(self):
-        """Internal helper to populate fields from config.ini."""
-        self.parser.read(self.ini_path)
-        # ProtonVPN section
-        if 'protonvpn' in self.parser:
-            sec = self.parser['protonvpn']
-            self.proton_user = sec.get('user', self.proton_user)
-            self.proton_pass = sec.get('pass', self.proton_pass)
-            self.proton_2fa = sec.get('2fa', self.proton_2fa)
-            self.wireguard_port = sec.getint('wireguard_port', self.wireguard_port)
-            self.session_dir = sec.get('session_dir', self.session_dir)
-        # qBittorrent section
-        if 'qbittorrent' in self.parser:
-            sec = self.parser['qbittorrent']
-            self.qb_enable = sec.getboolean('enable', self.qb_enable)
-            self.qb_url = sec.get('url', self.qb_url)
-            self.qb_user = sec.get('user', self.qb_user)
-            self.qb_pass = sec.get('pass', self.qb_pass)
-            self.qb_port = sec.getint('port', self.qb_port)
-        # Network defaults
-        if 'network' in self.parser:
-            sec = self.parser['network']
-            self.network_ks_default = sec.getboolean('ks_default', self.network_ks_default)
-            self.network_dns_default = sec.getboolean('dns_default', self.network_dns_default)
-            self.network_threshold_default = sec.getint('threshold_default', self.network_threshold_default)
-        # Tunnel JSON path
-        if 'tunnel' in self.parser:
-            sec = self.parser['tunnel']
-            self.tunnel_json_path = Path(sec.get('tunnel_json_path', str(self.tunnel_json_path)))
+        cfg = cls(config_dir)
+        if cfg.ini_path.exists():
+            try:
+                cfg.parser.read(cfg.ini_path)
+                # ProtonVPN section
+                if 'protonvpn' in cfg.parser:
+                    sec = cfg.parser['protonvpn']
+                    cfg.proton_user = sec.get('user', cfg.proton_user)
+                    cfg.proton_pass = sec.get('pass', cfg.proton_pass)
+                    cfg.proton_2fa = sec.get('2fa', cfg.proton_2fa)
+                    cfg.wireguard_port = sec.getint('wireguard_port', cfg.wireguard_port)
+                    cfg.session_dir = sec.get('session_dir', cfg.session_dir)
+                # qBittorrent section
+                if 'qbittorrent' in cfg.parser:
+                    sec = cfg.parser['qbittorrent']
+                    cfg.qb_enable = sec.getboolean('enable', cfg.qb_enable)
+                    cfg.qb_url = sec.get('url', cfg.qb_url)
+                    cfg.qb_user = sec.get('user', cfg.qb_user)
+                    cfg.qb_pass = sec.get('pass', cfg.qb_pass)
+                    cfg.qb_port = sec.getint('port', cfg.qb_port)
+
+                # Network defaults
+                if 'network' in cfg.parser:
+                    sec = cfg.parser['network']
+                    cfg.network_ks_default = sec.getboolean('ks_default', cfg.network_ks_default)
+                    cfg.network_dns_default = sec.getboolean('dns_default', cfg.network_dns_default)
+                    cfg.network_threshold_default = sec.getint('threshold_default', cfg.network_threshold_default)
+                # Monitor defaults
+                if 'monitor' in cfg.parser:
+                    sec = cfg.parser['monitor']
+                    cfg.monitor_interval = sec.getint('interval', cfg.monitor_interval)
+                    cfg.monitor_failures = sec.getint('failures', cfg.monitor_failures)
+                    cfg.monitor_latency_threshold = sec.getint('latency_threshold', cfg.monitor_latency_threshold)
+    return cfg
+
+
 
     def save(self):
         """
@@ -99,11 +112,19 @@ class Config:
             'pass': self.qb_pass,
             'port': str(self.qb_port)
         }
+
         self.parser['network'] = {
             'ks_default': str(self.network_ks_default),
             'dns_default': str(self.network_dns_default),
             'threshold_default': str(self.network_threshold_default)
         }
+
+        self.parser['monitor'] = {
+            'interval': str(self.monitor_interval),
+            'failures': str(self.monitor_failures),
+            'latency_threshold': str(self.monitor_latency_threshold)
+        }
+
         # Write file
         try:
             with open(self.ini_path, 'w') as f:
@@ -112,6 +133,7 @@ class Config:
             logging.error(f"Cannot write config to {self.ini_path}: {e}")
 
     def interactive_setup(self, proton=False, qb=False, network=False):
+
         """
         Run interactive prompts for specified components.
         If no flags, configure all.

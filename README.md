@@ -30,8 +30,11 @@
 - **Fastest-by-RTT**: choose lowest-latency via ICMP (`ping`) or ProtonVPN API (`--fastest api`), or early exit under `--latency-cutoff`  
 - **NAT-PMP Port Forwarding**: `natpmpc`-based mapping & automatic lease refresh  
 - **qBittorrent-nox Integration**: sync listen-port via WebUI API or config-file fallback; resume stalled torrents  
-- **Kill-Switch**: reversible iptables DROP of all non-VPN traffic (`--ks`)  
-- **Modular init**: `pvpn init [--proton|--qb|--network]` for targeted or full setup
+- **Kill-Switch**: reversible iptables DROP of all non-VPN traffic (`--ks`)
+- **Split-Tunnel**: bypass VPN for specific processes, PIDs, or IPs (`pvpn tunnel`)
+- **Modular init**: `pvpn init [--proton|--qb|--tunnel|--network]` for targeted or full setup
+- **Background Monitor**: auto-reconnect on repeated ping failures or high latency
+
 
 ---
 
@@ -120,6 +123,39 @@ port = 6881
 ks_default = false
 dns_default = true
 threshold_default = 60
+
+[tunnel]
+tunnel_json_path = /home/pi/.pvpn-cli/pvpn/tunnel.json
+
+[monitor]
+interval = 60
+failures = 3
+latency_threshold = 500
+```
+
+### 3. Example `tunnel.json`
+
+```json
+{
+  "processes": ["qbittorrent-nox"],
+  "pids": [12345],
+  "ips": ["203.0.113.0/24"]
+}
+```
+
+### 4. Background Monitor
+
+After `pvpn connect` succeeds, a background thread periodically pings the
+connected server. When `failures` consecutive checks either time out or exceed
+`latency_threshold` (ms), the client automatically runs a disconnect followed
+by a new connection to rotate servers. Control these values in the `[monitor]`
+section of `config.ini`:
+
+```
+[monitor]
+interval = 60            # seconds between checks
+failures = 3             # consecutive bad pings before reconnect
+latency_threshold = 500  # milliseconds considered too slow
 
 ```
 
