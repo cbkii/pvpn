@@ -73,7 +73,7 @@ def start_forward(iface: str) -> int:
 
     pub_port = _request_mapping(gateway, internal_port)
     if not pub_port:
-        logging.error("Initial NAT-PMP mapping failed")
+        logging.warning("Initial NAT-PMP mapping failed")
         return 0
 
     logging.info(f"NAT-PMP mapping: public {pub_port} → internal {internal_port}")
