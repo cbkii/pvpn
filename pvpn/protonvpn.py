@@ -198,12 +198,16 @@ def connect(cfg: Config, args):
     pub_port = start_forward(iface)
 
     from pvpn.qbittorrent import update_port
-    update_port(cfg, pub_port)
+    if pub_port:
+        update_port(cfg, pub_port)
+    else:
+        logging.warning("Port forwarding unavailable; continuing without it")
 
     from pvpn.monitor import start_monitor
     start_monitor(cfg, iface)
 
-    print(f"✅ Connected: {server['Name']} on {iface}, forwarded port {pub_port}")
+    port_msg = pub_port if pub_port else 'none'
+    print(f"✅ Connected: {server['Name']} on {iface}, forwarded port {port_msg}")
 
 def disconnect(cfg: Config, args):
     """

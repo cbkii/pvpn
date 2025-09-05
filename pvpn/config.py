@@ -94,7 +94,9 @@ class Config:
                     cfg.monitor_interval = sec.getint('interval', cfg.monitor_interval)
                     cfg.monitor_failures = sec.getint('failures', cfg.monitor_failures)
                     cfg.monitor_latency_threshold = sec.getint('latency_threshold', cfg.monitor_latency_threshold)
-    return cfg
+            except Exception as e:
+                logging.warning(f"Could not load existing config: {e}")
+        return cfg
 
 
 
