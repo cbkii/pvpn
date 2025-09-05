@@ -36,6 +36,11 @@ class Config:
         self.network_dns_default = True
         self.network_threshold_default = 60
 
+        # Monitoring defaults
+        self.monitor_interval = 60
+        self.monitor_failures = 3
+        self.monitor_latency_threshold = 500
+
         # Load existing config if available
         try:
             loaded = Config.load(config_dir)
@@ -69,15 +74,21 @@ class Config:
                     cfg.qb_user = sec.get('user', cfg.qb_user)
                     cfg.qb_pass = sec.get('pass', cfg.qb_pass)
                     cfg.qb_port = sec.getint('port', cfg.qb_port)
+
                 # Network defaults
                 if 'network' in cfg.parser:
                     sec = cfg.parser['network']
                     cfg.network_ks_default = sec.getboolean('ks_default', cfg.network_ks_default)
                     cfg.network_dns_default = sec.getboolean('dns_default', cfg.network_dns_default)
                     cfg.network_threshold_default = sec.getint('threshold_default', cfg.network_threshold_default)
-            except Exception as e:
-                logging.error(f"Error reading config.ini: {e}")
-        return cfg
+                # Monitor defaults
+                if 'monitor' in cfg.parser:
+                    sec = cfg.parser['monitor']
+                    cfg.monitor_interval = sec.getint('interval', cfg.monitor_interval)
+                    cfg.monitor_failures = sec.getint('failures', cfg.monitor_failures)
+                    cfg.monitor_latency_threshold = sec.getint('latency_threshold', cfg.monitor_latency_threshold)
+    return cfg
+
 
     def save(self):
         """
@@ -98,10 +109,16 @@ class Config:
             'pass': self.qb_pass,
             'port': str(self.qb_port)
         }
+
         self.parser['network'] = {
             'ks_default': str(self.network_ks_default),
             'dns_default': str(self.network_dns_default),
             'threshold_default': str(self.network_threshold_default)
+        }
+        self.parser['monitor'] = {
+            'interval': str(self.monitor_interval),
+            'failures': str(self.monitor_failures),
+            'latency_threshold': str(self.monitor_latency_threshold)
         }
         # Write file
         try:
@@ -111,6 +128,7 @@ class Config:
             logging.error(f"Cannot write config to {self.ini_path}: {e}")
 
     def interactive_setup(self, proton=False, qb=False, network=False):
+
         """
         Run interactive prompts for specified components.
         If no flags, configure all.
