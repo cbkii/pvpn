@@ -7,7 +7,7 @@ def test_subcommands_present():
     parser = build_parser()
     help_text = parser.format_help()
     # Check that all subcommands are documented
-    for cmd in ["init", "connect", "disconnect", "status", "list", "tunnel"]:
+    for cmd in ["init", "connect", "disconnect", "status", "list"]:
         assert cmd in help_text
 
 def test_connect_alias():

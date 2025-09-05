@@ -21,6 +21,7 @@ def test_config_save_load(tmp_path):
     assert cfg2.proton_pass == "secret"
     assert cfg2.qb_port == 12345
 
+
 def test_tunnel_rules(tmp_path):
     cfg_dir = tmp_path / "cfg"
     cfg = Config(config_dir=str(cfg_dir))
