@@ -258,32 +258,35 @@ def disconnect(cfg: Config, args):
     print("✅ Disconnected")
 
 def status(cfg: Config):
-    """Display WireGuard, routing, and qBittorrent status."""
+    """Display WireGuard, routing, and qBittorrent status with colour and icons."""
     from pvpn.wireguard import get_active_iface, get_dns_servers
     from pvpn.routing import killswitch_status
     from pvpn.natpmp import get_public_port
     from pvpn.qbittorrent import get_listen_port
 
+    RESET = "\033[0m"
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+
+    def line(label: str, ok: bool, value: str):
+        icon = "✔" if ok else "✖"
+        color = GREEN if ok else RED
+        print(f"{color}{icon}{RESET} {label:<14}: {color}{value}{RESET}")
+
     iface = get_active_iface()
-    print(f"Interface: {iface if iface else 'none'}")
+    line("Interface", bool(iface), iface if iface else "none")
 
     dns = get_dns_servers()
-    if dns:
-        print("DNS: " + ", ".join(dns))
-    else:
-        print("DNS: unknown")
+    line("DNS", bool(dns), ", ".join(dns) if dns else "unknown")
 
     ks = killswitch_status()
-    print(f"Kill-switch: {'enabled' if ks else 'disabled'}")
+    line("Kill-switch", ks, "enabled" if ks else "disabled")
 
     pub_port = get_public_port(iface, cfg.qb_port) if iface else 0
-    if pub_port:
-        print(f"Forwarded port: {pub_port}")
-    else:
-        print("Forwarded port: none")
+    line("Forwarded port", bool(pub_port), str(pub_port) if pub_port else "none")
 
     qb_port = get_listen_port(cfg)
-    print(f"qBittorrent port: {qb_port}")
+    line("qBittorrent port", bool(qb_port), str(qb_port) if qb_port else "unknown")
 
 def list_servers(cfg: Config, args):
     """
