@@ -200,6 +200,9 @@ def connect(cfg: Config, args):
     from pvpn.qbittorrent import update_port
     update_port(cfg, pub_port)
 
+    from pvpn.monitor import start_monitor
+    start_monitor(cfg, iface)
+
     print(f"✅ Connected: {server['Name']} on {iface}, forwarded port {pub_port}")
 
 def disconnect(cfg: Config, args):

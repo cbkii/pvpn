@@ -39,6 +39,11 @@ class Config:
         self.network_dns_default = True
         self.network_threshold_default = 60
 
+        # Monitoring defaults
+        self.monitor_interval = 60
+        self.monitor_failures = 3
+        self.monitor_latency_threshold = 500
+
         # Load existing config if available
         try:
             loaded = Config.load(config_dir)
@@ -78,6 +83,12 @@ class Config:
                     cfg.network_ks_default = sec.getboolean('ks_default', cfg.network_ks_default)
                     cfg.network_dns_default = sec.getboolean('dns_default', cfg.network_dns_default)
                     cfg.network_threshold_default = sec.getint('threshold_default', cfg.network_threshold_default)
+                # Monitor defaults
+                if 'monitor' in cfg.parser:
+                    sec = cfg.parser['monitor']
+                    cfg.monitor_interval = sec.getint('interval', cfg.monitor_interval)
+                    cfg.monitor_failures = sec.getint('failures', cfg.monitor_failures)
+                    cfg.monitor_latency_threshold = sec.getint('latency_threshold', cfg.monitor_latency_threshold)
                 # Tunnel JSON path
                 if 'tunnel' in cfg.parser:
                     sec = cfg.parser['tunnel']
@@ -109,6 +120,11 @@ class Config:
             'ks_default': str(self.network_ks_default),
             'dns_default': str(self.network_dns_default),
             'threshold_default': str(self.network_threshold_default)
+        }
+        self.parser['monitor'] = {
+            'interval': str(self.monitor_interval),
+            'failures': str(self.monitor_failures),
+            'latency_threshold': str(self.monitor_latency_threshold)
         }
         self.parser['tunnel'] = {
             'tunnel_json_path': str(self.tunnel_json_path)
