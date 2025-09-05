@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+VENV_DIR="/opt/pvpn/venv"
+exec "$VENV_DIR/bin/python" -m pvpn.cli "$@"
