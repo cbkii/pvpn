@@ -102,6 +102,7 @@ def bring_down():
         logging.error(f"Failed to list interfaces: {e}")
         return
 
+
     for line in output.splitlines():
         m = re.search(r':\s*(wgp[a-z]{2}[0-9a-z]+):', line)
         if m:
@@ -115,7 +116,6 @@ def bring_down():
 
     # Restore original DNS if a backup exists
     restore_file(RESOLV_BAK, RESOLV_CONF)
-
 def status():
     """
     Display status of pvpn-managed WireGuard interfaces and DNS.
