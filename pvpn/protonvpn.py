@@ -224,13 +224,32 @@ def disconnect(cfg: Config, args):
     print("✅ Disconnected")
 
 def status(cfg: Config):
-    """
-    Display current VPN and qBittorrent status.
-    """
-    from pvpn.wireguard import status as wg_status
-    wg_status()
-    # Further implementation can query qBittorrent API for port + torrent count
-    print("qBittorrent and routing status not yet fully implemented")
+    """Display WireGuard, routing, and qBittorrent status."""
+    from pvpn.wireguard import get_active_iface, get_dns_servers
+    from pvpn.routing import killswitch_status
+    from pvpn.natpmp import get_public_port
+    from pvpn.qbittorrent import get_listen_port
+
+    iface = get_active_iface()
+    print(f"Interface: {iface if iface else 'none'}")
+
+    dns = get_dns_servers()
+    if dns:
+        print("DNS: " + ", ".join(dns))
+    else:
+        print("DNS: unknown")
+
+    ks = killswitch_status()
+    print(f"Kill-switch: {'enabled' if ks else 'disabled'}")
+
+    pub_port = get_public_port(iface, cfg.qb_port) if iface else 0
+    if pub_port:
+        print(f"Forwarded port: {pub_port}")
+    else:
+        print("Forwarded port: none")
+
+    qb_port = get_listen_port(cfg)
+    print(f"qBittorrent port: {qb_port}")
 
 def list_servers(cfg: Config, args):
     """
