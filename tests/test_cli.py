@@ -1,6 +1,5 @@
 # tests/test_cli.py
 
-import pytest
 from pvpn.cli import build_parser
 
 def test_subcommands_present():
