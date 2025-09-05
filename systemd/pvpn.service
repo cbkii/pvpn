@@ -4,10 +4,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStart=/usr/local/bin/pvpn connect
 ExecStop=/usr/local/bin/pvpn disconnect
-RemainAfterExit=yes
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target

@@ -127,12 +127,9 @@ def _monitor_loop(cfg: Config, iface: str) -> None:
 
 
 def start_monitor(cfg: Config, iface: str) -> threading.Thread:
-    """Spawn the monitoring thread and return it.
+    """Spawn the monitoring thread and return it."""
 
-    The thread is marked as daemon so it won't block process exit.
-    """
-
-    thread = threading.Thread(target=_monitor_loop, args=(cfg, iface), daemon=True)
+    thread = threading.Thread(target=_monitor_loop, args=(cfg, iface))
     thread.start()
     return thread
 

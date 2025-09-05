@@ -221,10 +221,16 @@ def connect(cfg: Config, args):
         logging.warning("Port forwarding unavailable; continuing without it")
 
     from pvpn.monitor import start_monitor
-    start_monitor(cfg, iface)
+    monitor_thread = start_monitor(cfg, iface)
 
     port_msg = pub_port if pub_port else 'none'
     print(f"✅ Connected: {server['Name']} on {iface}, forwarded port {port_msg}")
+
+    # Keep process alive while monitoring runs
+    try:
+        monitor_thread.join()
+    except KeyboardInterrupt:
+        pass
 
 def disconnect(cfg: Config, args):
     """
