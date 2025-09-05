@@ -9,7 +9,7 @@ import logging
 import requests
 
 from pvpn.config import Config
-from pvpn.utils import run_cmd, check_root
+from pvpn.utils import run_cmd, check_root, chown_to_invoker
 
 LOGIN_URL = "https://account.protonvpn.com/api/v4/auth/login"
 SERVERS_URL = "https://api.protonvpn.ch/vpn/logicals"
@@ -39,6 +39,7 @@ def login(cfg: Config) -> str:
     try:
         with open(session_file, "w") as f:
             json.dump(session, f)
+        chown_to_invoker(session_file)
         logging.debug(f"Saved session token to {session_file}")
     except Exception as e:
         logging.error(f"Failed to write session file: {e}")
@@ -134,6 +135,7 @@ def download_configs(cfg: Config, token: str) -> str:
     """
     wg_path = os.path.join(cfg.config_dir, WG_DIR)
     os.makedirs(wg_path, exist_ok=True)
+    chown_to_invoker(wg_path)
     servers = fetch_servers(token)
     for s in servers:
         sid = s["ID"]
@@ -143,9 +145,11 @@ def download_configs(cfg: Config, token: str) -> str:
         resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code == 200:
             fname = f"wgp{code}{sid}.conf"
+            fpath = os.path.join(wg_path, fname)
             try:
-                with open(os.path.join(wg_path, fname), "wb") as f:
+                with open(fpath, "wb") as f:
                     f.write(resp.content)
+                chown_to_invoker(fpath)
             except Exception as e:
                 logging.error(f"Failed writing WG config {fname}: {e}")
         else:

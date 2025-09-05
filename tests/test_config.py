@@ -33,3 +33,35 @@ def test_tunnel_rules(tmp_path):
     cfg.save_tunnel_rules(new_rules)
     loaded = cfg.load_tunnel_rules()
     assert loaded == new_rules
+
+
+def test_env_config_dir(monkeypatch, tmp_path):
+    env_dir = tmp_path / "envcfg"
+    monkeypatch.setenv("PVPN_CONFIG_DIR", str(env_dir))
+    cfg = Config()
+    assert cfg.config_dir == env_dir
+
+
+def test_chown_to_invoker(monkeypatch, tmp_path):
+    """Config operations should chown files to the invoking user when run as root."""
+    cfg_dir = tmp_path / "cfg"
+
+    # Simulate running under sudo as UID/GID 1000
+    monkeypatch.setenv("SUDO_UID", "1000")
+    monkeypatch.setenv("SUDO_GID", "1000")
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+
+    chowned = []
+
+    def fake_chown(path, uid, gid):
+        chowned.append((Path(path), uid, gid))
+
+    monkeypatch.setattr(os, "chown", fake_chown)
+
+    cfg = Config(config_dir=str(cfg_dir))
+    cfg.save()
+    cfg.save_tunnel_rules({})
+
+    expected = {cfg_dir, cfg.ini_path, cfg.tunnel_json_path}
+    seen = {p for p, _, _ in chowned}
+    assert expected.issubset(seen)

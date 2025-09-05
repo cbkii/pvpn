@@ -100,8 +100,14 @@ pvpn init --network   # only DNS & kill-switch defaults
 
 This will populate:
 
-- **`~/.pvpn-cli/pvpn/config.ini`**  
-- **`~/.pvpn-cli/pvpn/tunnel.json`**  
+- **`~/.pvpn-cli/pvpn/config.ini`**
+- **`~/.pvpn-cli/pvpn/tunnel.json`**
+
+The configuration directory is resolved relative to the user invoking
+`pvpn`.  When running the CLI via `sudo`, files are still placed under the
+original user's home directory rather than `/root`.  To override the
+location entirely, set the `PVPN_CONFIG_DIR` environment variable before
+running commands.
 
 ### 2. Example `config.ini`
 

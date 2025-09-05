@@ -4,7 +4,10 @@ import configparser
 import json
 import getpass
 import logging
+import os
 from pathlib import Path
+
+from pvpn.utils import get_invoker_home, chown_to_invoker
 
 class Config:
     """
@@ -14,9 +17,17 @@ class Config:
     """
 
     def __init__(self, config_dir=None):
-        # Base directory for configs
-        self.config_dir = Path(config_dir or Path.home() / ".pvpn-cli" / "pvpn")
+        # Base directory for configs.  Prefer an explicit path, then the
+        # PVPN_CONFIG_DIR environment variable, and finally a directory under
+        # the invoking user's home (even when run via sudo).
+        base_dir = (
+            config_dir
+            or os.environ.get("PVPN_CONFIG_DIR")
+            or get_invoker_home() / ".pvpn-cli" / "pvpn"
+        )
+        self.config_dir = Path(base_dir).expanduser()
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        chown_to_invoker(self.config_dir)
 
         self.ini_path = self.config_dir / "config.ini"
         self.tunnel_json_path = self.config_dir / "tunnel.json"
@@ -39,13 +50,7 @@ class Config:
         self.network_dns_default = True
         self.network_threshold_default = 60
 
-        # Load existing config if available
-        try:
-            loaded = Config.load(config_dir)
-            # Overwrite defaults with loaded values
-            self.__dict__.update(loaded.__dict__)
-        except Exception as e:
-            logging.warning(f"Could not load existing config: {e}")
+        # Loading from disk is handled by the `load` classmethod.
 
     @classmethod
     def load(cls, config_dir=None):
@@ -119,6 +124,8 @@ class Config:
                 self.parser.write(f)
         except Exception as e:
             logging.error(f"Cannot write config to {self.ini_path}: {e}")
+        else:
+            chown_to_invoker(self.ini_path)
 
     def load_tunnel_rules(self):
         """
@@ -140,6 +147,8 @@ class Config:
                 json.dump(rules, f, indent=2)
         except Exception as e:
             logging.error(f"Failed to save tunnel rules: {e}")
+        else:
+            chown_to_invoker(self.tunnel_json_path)
 
     def interactive_setup(self, proton=False, qb=False, tunnel=False, network=False):
         """
