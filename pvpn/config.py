@@ -39,52 +39,49 @@ class Config:
         self.network_dns_default = True
         self.network_threshold_default = 60
 
-        # Load existing config if available
+        # Load existing config if available without recursion
         try:
-            loaded = Config.load(config_dir)
-            # Overwrite defaults with loaded values
-            self.__dict__.update(loaded.__dict__)
+            if self.ini_path.exists():
+                self._read_ini()
         except Exception as e:
             logging.warning(f"Could not load existing config: {e}")
 
     @classmethod
     def load(cls, config_dir=None):
         """
-        Instantiate and load settings from config.ini.
+        Instantiate a Config, automatically loading from config.ini if present.
         """
-        cfg = cls(config_dir)
-        if cfg.ini_path.exists():
-            try:
-                cfg.parser.read(cfg.ini_path)
-                # ProtonVPN section
-                if 'protonvpn' in cfg.parser:
-                    sec = cfg.parser['protonvpn']
-                    cfg.proton_user = sec.get('user', cfg.proton_user)
-                    cfg.proton_pass = sec.get('pass', cfg.proton_pass)
-                    cfg.proton_2fa = sec.get('2fa', cfg.proton_2fa)
-                    cfg.wireguard_port = sec.getint('wireguard_port', cfg.wireguard_port)
-                    cfg.session_dir = sec.get('session_dir', cfg.session_dir)
-                # qBittorrent section
-                if 'qbittorrent' in cfg.parser:
-                    sec = cfg.parser['qbittorrent']
-                    cfg.qb_enable = sec.getboolean('enable', cfg.qb_enable)
-                    cfg.qb_url = sec.get('url', cfg.qb_url)
-                    cfg.qb_user = sec.get('user', cfg.qb_user)
-                    cfg.qb_pass = sec.get('pass', cfg.qb_pass)
-                    cfg.qb_port = sec.getint('port', cfg.qb_port)
-                # Network defaults
-                if 'network' in cfg.parser:
-                    sec = cfg.parser['network']
-                    cfg.network_ks_default = sec.getboolean('ks_default', cfg.network_ks_default)
-                    cfg.network_dns_default = sec.getboolean('dns_default', cfg.network_dns_default)
-                    cfg.network_threshold_default = sec.getint('threshold_default', cfg.network_threshold_default)
-                # Tunnel JSON path
-                if 'tunnel' in cfg.parser:
-                    sec = cfg.parser['tunnel']
-                    cfg.tunnel_json_path = Path(sec.get('tunnel_json_path', str(cfg.tunnel_json_path)))
-            except Exception as e:
-                logging.error(f"Error reading config.ini: {e}")
-        return cfg
+        return cls(config_dir)
+
+    def _read_ini(self):
+        """Internal helper to populate fields from config.ini."""
+        self.parser.read(self.ini_path)
+        # ProtonVPN section
+        if 'protonvpn' in self.parser:
+            sec = self.parser['protonvpn']
+            self.proton_user = sec.get('user', self.proton_user)
+            self.proton_pass = sec.get('pass', self.proton_pass)
+            self.proton_2fa = sec.get('2fa', self.proton_2fa)
+            self.wireguard_port = sec.getint('wireguard_port', self.wireguard_port)
+            self.session_dir = sec.get('session_dir', self.session_dir)
+        # qBittorrent section
+        if 'qbittorrent' in self.parser:
+            sec = self.parser['qbittorrent']
+            self.qb_enable = sec.getboolean('enable', self.qb_enable)
+            self.qb_url = sec.get('url', self.qb_url)
+            self.qb_user = sec.get('user', self.qb_user)
+            self.qb_pass = sec.get('pass', self.qb_pass)
+            self.qb_port = sec.getint('port', self.qb_port)
+        # Network defaults
+        if 'network' in self.parser:
+            sec = self.parser['network']
+            self.network_ks_default = sec.getboolean('ks_default', self.network_ks_default)
+            self.network_dns_default = sec.getboolean('dns_default', self.network_dns_default)
+            self.network_threshold_default = sec.getint('threshold_default', self.network_threshold_default)
+        # Tunnel JSON path
+        if 'tunnel' in self.parser:
+            sec = self.parser['tunnel']
+            self.tunnel_json_path = Path(sec.get('tunnel_json_path', str(self.tunnel_json_path)))
 
     def save(self):
         """
