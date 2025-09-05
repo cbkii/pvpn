@@ -1,7 +1,6 @@
 # pvpn/config.py
 
 import configparser
-import json
 import getpass
 import logging
 import os
@@ -22,6 +21,8 @@ class Config:
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         self.ini_path = self.config_dir / "config.ini"
+        self.ini_path.touch(exist_ok=True)
+        os.chmod(self.ini_path, 0o600)
         self.parser = configparser.ConfigParser()
 
         # Default settings
@@ -40,7 +41,6 @@ class Config:
         self.network_ks_default = False
         self.network_dns_default = True
         self.network_threshold_default = 60
-
 
         # Monitoring defaults
         self.monitor_interval = 60
@@ -98,8 +98,6 @@ class Config:
                 logging.warning(f"Could not load existing config: {e}")
         return cfg
 
-
-
     def save(self):
         """
         Write the current settings to config.ini.
@@ -136,30 +134,9 @@ class Config:
         try:
             with open(self.ini_path, 'w') as f:
                 self.parser.write(f)
+            os.chmod(self.ini_path, 0o600)
         except Exception as e:
             logging.error(f"Cannot write config to {self.ini_path}: {e}")
-
-
-    def load_tunnel_rules(self):
-        """
-        Load split-tunnel rules from JSON, return defaults on error.
-        """
-        try:
-            if self.tunnel_json_path.exists():
-                return json.loads(self.tunnel_json_path.read_text())
-        except Exception as e:
-            logging.error(f"Failed to load tunnel rules: {e}")
-        return {"processes": [], "pids": [], "ips": []}
-
-    def save_tunnel_rules(self, rules):
-        """
-        Save split-tunnel rules to JSON.
-        """
-        try:
-            with open(self.tunnel_json_path, 'w') as f:
-                json.dump(rules, f, indent=2)
-        except Exception as e:
-            logging.error(f"Failed to save tunnel rules: {e}")
 
     @staticmethod
     def _qb_pass_hash(password: str) -> str:
@@ -181,7 +158,7 @@ class Config:
             return
 
         parser = configparser.RawConfigParser()
-        parser.optionxform = str
+        parser.optionxform = lambda opt: opt
         parser.read(conf_path)
         if 'Preferences' not in parser:
             parser.add_section('Preferences')
@@ -202,15 +179,14 @@ class Config:
             parser.write(f)
         logging.info(f"Enabled qBittorrent WebUI in {conf_path}. Manual restart required.")
 
+    def interactive_setup(self, proton: bool = False, qb: bool = False, network: bool = False):
         """
-        Run interactive prompts for specified components.
-        If no flags, configure all.
+        Run interactive prompts for specified components. If no flags, configure all.
         """
-        # Enable all if none specified
+
         if not any([proton, qb, network]):
             proton = qb = network = True
 
-        # ProtonVPN configuration
         if proton:
             print("=== ProtonVPN Configuration ===")
             self.proton_user = input(f"ProtonVPN username [{self.proton_user}]: ") or self.proton_user
@@ -221,7 +197,6 @@ class Config:
             sd = input(f"Session directory [{self.session_dir}]: ") or self.session_dir
             self.session_dir = sd
 
-        # qBittorrent configuration
         if qb:
             print("=== qBittorrent Configuration ===")
             en = input(f"Enable WebUI API (true/false) [{self.qb_enable}]: ") or str(self.qb_enable)
@@ -239,16 +214,20 @@ class Config:
                 self._enable_qb_webui()
                 print("qBittorrent WebUI configured. Restart qbittorrent-nox once to apply.")
 
-        # Network defaults configuration
         if network:
             print("=== Network Defaults ===")
-            ks = input(f"Default kill-switch (true/false) [{self.network_ks_default}]: ") or str(self.network_ks_default)
+            ks = input(
+                f"Default kill-switch (true/false) [{self.network_ks_default}]: "
+            ) or str(self.network_ks_default)
             self.network_ks_default = ks.lower() in ("true", "1", "yes", "y")
-            dns = input(f"Default Proton DNS (true/false) [{self.network_dns_default}]: ") or str(self.network_dns_default)
+            dns = input(
+                f"Default Proton DNS (true/false) [{self.network_dns_default}]: "
+            ) or str(self.network_dns_default)
             self.network_dns_default = dns.lower() in ("true", "1", "yes", "y")
-            thr = input(f"Default load threshold (1-100) [{self.network_threshold_default}]: ") or str(self.network_threshold_default)
+            thr = input(
+                f"Default load threshold (1-100) [{self.network_threshold_default}]: "
+            ) or str(self.network_threshold_default)
             self.network_threshold_default = int(thr)
 
-        # Save updated configuration
         self.save()
         print(f"Configuration saved to {self.ini_path}")

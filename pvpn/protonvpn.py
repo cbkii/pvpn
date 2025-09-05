@@ -9,7 +9,7 @@ import logging
 import requests
 
 from pvpn.config import Config
-from pvpn.utils import run_cmd, check_root
+from pvpn.utils import check_root
 
 LOGIN_URL = "https://account.protonvpn.com/api/v4/auth/login"
 SERVERS_URL = "https://api.protonvpn.ch/vpn/logicals"
@@ -175,9 +175,23 @@ def connect(cfg: Config, args):
         logging.error("No servers match the specified filters")
         sys.exit(1)
 
+    from pvpn.natpmp import probe_server
+
     method = args.fastest or "ping"
     cutoff = getattr(args, "latency_cutoff", None)
-    server = select_fastest(flt, method=method, cutoff=cutoff)
+    server = None
+    while flt:
+        cand = select_fastest(flt, method=method, cutoff=cutoff)
+        ip = cand.get("UDP", "").split(":")[0]
+        if probe_server(ip, cfg.qb_port):
+            server = cand
+            break
+        logging.info(f"Server {cand['Name']} lacks NAT-PMP; trying next")
+        flt.remove(cand)
+
+    if not server:
+        logging.error("No NAT-PMP capable servers found")
+        sys.exit(1)
 
     # Determine config file name
     code = server["NameCode"].lower()
@@ -194,20 +208,29 @@ def connect(cfg: Config, args):
         from pvpn.routing import enable_killswitch
         enable_killswitch(iface)
 
+    from pvpn.qbittorrent import start_service, update_port
+    if cfg.qb_enable:
+        start_service()
+
     from pvpn.natpmp import start_forward
     pub_port = start_forward(iface)
 
-    from pvpn.qbittorrent import update_port
     if pub_port:
         update_port(cfg, pub_port)
     else:
         logging.warning("Port forwarding unavailable; continuing without it")
 
     from pvpn.monitor import start_monitor
-    start_monitor(cfg, iface)
+    monitor_thread = start_monitor(cfg, iface)
 
     port_msg = pub_port if pub_port else 'none'
     print(f"✅ Connected: {server['Name']} on {iface}, forwarded port {port_msg}")
+
+    # Keep process alive while monitoring runs
+    try:
+        monitor_thread.join()
+    except KeyboardInterrupt:
+        pass
 
 def disconnect(cfg: Config, args):
     """
@@ -217,6 +240,10 @@ def disconnect(cfg: Config, args):
       - restore DNS
     """
     check_root()
+
+    from pvpn.qbittorrent import stop_service
+    if cfg.qb_enable:
+        stop_service()
 
     if args.ks == "false":
         from pvpn.routing import disable_killswitch

@@ -6,7 +6,6 @@ Requests a mapping from the VPN gateway to the local qBittorrent port,
 then periodically refreshes the lease.
 """
 
-import os
 import subprocess
 import threading
 import time
@@ -24,10 +23,12 @@ def _get_vpn_gateway(iface: str) -> str:
       ip route show dev <iface> | grep default
     """
     try:
-        out = run_cmd(f"ip route show dev {iface} | grep default")
-        parts = out.split()
-        gw = parts[parts.index("via") + 1]
-        return gw
+        out = run_cmd(["ip", "route", "show", "dev", iface])
+        for line in out.splitlines():
+            if line.startswith("default"):
+                parts = line.split()
+                return parts[parts.index("via") + 1]
+        raise RuntimeError("no default route found")
     except Exception as e:
         logging.error(f"Failed to get VPN gateway for interface {iface}: {e}")
         raise
@@ -51,6 +52,11 @@ def _request_mapping(gateway: str, internal_port: int) -> int:
     except Exception as e:
         logging.error(f"Unexpected error calling natpmpc: {e}")
     return 0
+
+
+def probe_server(ip: str, internal_port: int) -> bool:
+    """Return True if the server responds to a NAT-PMP mapping request."""
+    return _request_mapping(ip, internal_port) != 0
 
 def start_forward(iface: str) -> int:
     """
@@ -79,9 +85,18 @@ def start_forward(iface: str) -> int:
     logging.info(f"NAT-PMP mapping: public {pub_port} → internal {internal_port}")
 
     def _refresher():
+        current = pub_port
         while True:
             time.sleep(REFRESH_INTERVAL)
-            _request_mapping(gateway, internal_port)
+            new_port = _request_mapping(gateway, internal_port)
+            if new_port and new_port != current:
+                logging.info(f"NAT-PMP port changed {current} -> {new_port}")
+                try:
+                    from pvpn.qbittorrent import update_port
+                    update_port(cfg, new_port)
+                except Exception as e:
+                    logging.error(f"Failed to update qBittorrent: {e}")
+                current = new_port
 
     t = threading.Thread(target=_refresher, daemon=True)
     t.start()

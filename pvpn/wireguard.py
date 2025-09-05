@@ -7,7 +7,6 @@ Manage WireGuard interface lifecycle:
 - status: display interface and DNS status
 """
 
-import os
 import re
 import logging
 from pathlib import Path
@@ -65,15 +64,15 @@ def bring_up(conf_file: str, dns: bool = True) -> str:
 
     # Tear down stale interface if exists
     try:
-        run_cmd(f"ip link del dev {iface}", capture_output=False)
+        run_cmd(["ip", "link", "del", "dev", iface], capture_output=False)
     except Exception:
         pass  # ignore if not present
 
     # Create and configure interface
-    run_cmd(f"ip link add dev {iface} type wireguard")
-    run_cmd(f"wg setconf {iface} {conf_file}")
-    run_cmd(f"ip address add {addr} peer {gateway} dev {iface}")
-    run_cmd(f"ip link set up dev {iface}")
+    run_cmd(["ip", "link", "add", "dev", iface, "type", "wireguard"])
+    run_cmd(["wg", "setconf", iface, conf_file])
+    run_cmd(["ip", "address", "add", addr, "peer", gateway, "dev", iface])
+    run_cmd(["ip", "link", "set", "up", "dev", iface])
     logging.info(f"Brought up interface {iface} with IP {addr}")
 
     # Update DNS
@@ -98,7 +97,7 @@ def bring_down():
     check_root()
 
     try:
-        output = run_cmd("ip -o link show")
+        output = run_cmd(["ip", "-o", "link", "show"])
     except Exception as e:
         logging.error(f"Failed to list interfaces: {e}")
         return
@@ -108,22 +107,26 @@ def bring_down():
         if m:
             iface = m.group(1)
             try:
-                run_cmd(f"ip link set down dev {iface}", capture_output=False)
-                run_cmd(f"ip link del dev {iface}", capture_output=False)
+                run_cmd(["ip", "link", "set", "down", "dev", iface], capture_output=False)
+                run_cmd(["ip", "link", "del", "dev", iface], capture_output=False)
                 logging.info(f"Torn down WireGuard interface {iface}")
             except Exception as e:
                 logging.error(f"Error tearing down {iface}: {e}")
+
+    # Restore original DNS if a backup exists
+    restore_file(RESOLV_BAK, RESOLV_CONF)
 
 def status():
     """
     Display status of pvpn-managed WireGuard interfaces and DNS.
     """
     try:
-        print(run_cmd("wg show all"))
+        print(run_cmd(["wg", "show", "all"]))
     except Exception as e:
         logging.error(f"wg show failed: {e}")
     try:
-        print(run_cmd("ip -4 addr show | grep wgp"))
+        out = run_cmd(["ip", "-4", "addr", "show"])
+        print("\n".join([l for l in out.splitlines() if "wgp" in l]))
     except Exception:
         pass
     # Display current DNS
@@ -137,7 +140,7 @@ def status():
 def get_active_iface() -> str:
     """Return the first active pvpn-managed WireGuard interface name or an empty string."""
     try:
-        out = run_cmd("wg show interfaces").strip()
+        out = run_cmd(["wg", "show", "interfaces"]).strip()
         for iface in out.split():
             if iface.startswith("wgp"):
                 return iface
