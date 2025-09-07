@@ -13,6 +13,25 @@ from pathlib import Path
 
 from pvpn.utils import run_cmd, backup_file, restore_file, check_root
 
+
+def ensure_ipv6_allowed(conf_file: str) -> None:
+    """Ensure ``AllowedIPs`` in ``conf_file`` routes IPv6 (``::/0``)."""
+    try:
+        with open(conf_file, "r") as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            m = re.match(r"\s*AllowedIPs\s*=\s*(.+)", line)
+            if m:
+                ips = m.group(1).strip()
+                if "::/0" not in ips:
+                    lines[i] = f"AllowedIPs = {ips}, ::/0\n"
+                    with open(conf_file, "w") as f:
+                        f.writelines(lines)
+                    logging.info(f"Added IPv6 ::/0 to AllowedIPs in {conf_file}")
+                break
+    except Exception as e:
+        logging.debug(f"Failed to ensure IPv6 AllowedIPs: {e}")
+
 # Constants for DNS management
 RESOLV_CONF = "/etc/resolv.conf"
 RESOLV_BAK = "/etc/resolv.conf.pvpnbak"
@@ -29,6 +48,8 @@ def bring_up(conf_file: str, dns: bool = True) -> str:
     iface = Path(conf_file).stem
     addr = None
     dns_servers = []
+
+    ensure_ipv6_allowed(conf_file)
 
     # Parse Address and DNS entries
     try:

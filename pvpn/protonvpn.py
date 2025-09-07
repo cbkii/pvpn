@@ -240,7 +240,7 @@ def connect(cfg: Config, args):
     while flt:
         cand = select_fastest(flt, method=method, cutoff=cutoff)
         ip = cand.get("UDP", "").split(":")[0]
-        if probe_server(ip, cfg.qb_port):
+        if probe_server(ip):
             server = cand
             break
         logging.info(f"Server {cand['Name']} lacks NAT-PMP; trying next")
@@ -339,7 +339,7 @@ def status(cfg: Config):
     ks = killswitch_status()
     line("Kill-switch", ks, "enabled" if ks else "disabled")
 
-    pub_port = get_public_port(iface, cfg.qb_port) if iface else 0
+    pub_port = get_public_port(iface) if iface else 0
     line("Forwarded port", bool(pub_port), str(pub_port) if pub_port else "none")
 
     qb_port = get_listen_port(cfg)

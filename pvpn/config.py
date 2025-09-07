@@ -168,7 +168,9 @@ class Config:
         Ensure qBittorrent's WebUI is enabled locally with stored credentials.
         Requires a manual restart of qbittorrent-nox to take effect.
         """
-        conf_path = Path.home() / ".config" / "qBittorrent" / "qBittorrent.conf"
+        from pvpn.qbittorrent import config_path as qb_config_path
+
+        conf_path = qb_config_path()
         if not conf_path.exists():
             logging.warning(f"qBittorrent config not found: {conf_path}")
             return
@@ -190,6 +192,13 @@ class Config:
         pref['WebUI\\Username'] = self.qb_user
         if self.qb_pass:
             pref['WebUI\\Password_PBKDF2'] = self._qb_pass_hash(self.qb_pass)
+
+        # Ensure qBittorrent listens on the configured port without automatic mapping
+        pref['Session\\Port'] = str(self.qb_port)
+        pref['Connection\\UPnP'] = 'false'
+        pref['Connection\\NAT-PMP'] = 'false'
+        if 'Connection\\PortRangeMin' in pref:
+            pref.pop('Connection\\PortRangeMin')
 
         with open(conf_path, 'w') as f:
             parser.write(f)

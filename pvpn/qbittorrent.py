@@ -21,6 +21,54 @@ from pvpn.utils import run_cmd
 RESUME_TIMEOUT = 120
 POLL_INTERVAL = 5
 
+
+def config_path() -> Path:
+    """Return the path to qBittorrent's configuration file.
+
+    Preference order:
+    1. ``~/qbprofile/qBittorrent/config/qBittorrent.conf``
+    2. ``--profile`` path from a running ``qbittorrent-nox`` process
+    3. Legacy ``~/.config/qBittorrent/qBittorrent.conf``
+    """
+
+    default = (
+        Path.home()
+        / "qbprofile"
+        / "qBittorrent"
+        / "config"
+        / "qBittorrent.conf"
+    )
+    if default.exists():
+        return default
+
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-a", "qbittorrent-nox"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        for line in out.splitlines():
+            parts = line.split()
+            for i, part in enumerate(parts):
+                profile = None
+                if part.startswith("--profile="):
+                    profile = part.split("=", 1)[1]
+                elif part == "--profile" and i + 1 < len(parts):
+                    profile = parts[i + 1]
+                if profile:
+                    conf = (
+                        Path(profile)
+                        / "qBittorrent"
+                        / "config"
+                        / "qBittorrent.conf"
+                    )
+                    if conf.exists():
+                        return conf
+    except Exception as e:  # pragma: no cover - best-effort
+        logging.debug(f"Failed to detect qbittorrent profile: {e}")
+
+    return Path.home() / ".config" / "qBittorrent" / "qBittorrent.conf"
+
 def update_port(cfg: Config, new_port: int):
     """
     Update qBittorrent's listen port to ``new_port`` via the WebUI API.
@@ -51,6 +99,7 @@ def update_port(cfg: Config, new_port: int):
             "listen_port": new_port,
             "random_port": False,
             "upnp": False,
+            "use_natpmp": False,
         }
         r2 = session.post(
             f"{cfg.qb_url}/api/v2/app/setPreferences",
@@ -101,16 +150,16 @@ def get_listen_port(cfg: Config) -> int:
 
     # 2. Config file
     try:
-        conf_path = Path.home() / ".config" / "qBittorrent" / "qBittorrent.conf"
+        cfg_file = config_path()
         parser = configparser.RawConfigParser()
         parser.optionxform = lambda opt: opt  # type: ignore[assignment]
-        parser.read(conf_path)
+        parser.read(cfg_file)
         if 'Preferences' in parser:
             pref = parser['Preferences']
             for key in (
+                'Session\\Port',
                 'Connection\\PortRangeMin',
                 'Bittorrent\\PortRangeMin',
-                'WebUI\\Port',
             ):
                 if key in pref:
                     port = int(pref[key])
