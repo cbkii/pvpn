@@ -32,12 +32,19 @@ def test_connect_uses_specified_config(tmp_path, monkeypatch):
     monkeypatch.setattr("pvpn.wireguard.bring_up", fake_bring_up)
     monkeypatch.setattr("pvpn.routing.enable_killswitch", lambda iface: None)
     monkeypatch.setattr("pvpn.natpmp.start_forward", lambda iface: 0)
-    monkeypatch.setattr("pvpn.monitor.start_monitor", lambda cfg, iface: DummyThread())
+    monitor_called = {}
+
+    def fake_start_monitor(cfg, iface, conf_file=None):
+        monitor_called["conf"] = conf_file
+        return DummyThread()
+
+    monkeypatch.setattr("pvpn.monitor.start_monitor", fake_start_monitor)
     monkeypatch.setattr("pvpn.qbittorrent.start_service", lambda: None)
     monkeypatch.setattr("pvpn.qbittorrent.update_port", lambda cfg, port: None)
 
     pv.connect(cfg, args)
     assert called["file"] == str(conf)
+    assert monitor_called["conf"] == str(conf)
 
 
 def test_connect_uses_first_available_config(tmp_path, monkeypatch):
@@ -65,9 +72,16 @@ def test_connect_uses_first_available_config(tmp_path, monkeypatch):
     monkeypatch.setattr("pvpn.wireguard.bring_up", fake_bring_up)
     monkeypatch.setattr("pvpn.routing.enable_killswitch", lambda iface: None)
     monkeypatch.setattr("pvpn.natpmp.start_forward", lambda iface: 0)
-    monkeypatch.setattr("pvpn.monitor.start_monitor", lambda cfg, iface: DummyThread())
+    monitor_called = {}
+
+    def fake_start_monitor(cfg, iface, conf_file=None):
+        monitor_called["conf"] = conf_file
+        return DummyThread()
+
+    monkeypatch.setattr("pvpn.monitor.start_monitor", fake_start_monitor)
     monkeypatch.setattr("pvpn.qbittorrent.start_service", lambda: None)
     monkeypatch.setattr("pvpn.qbittorrent.update_port", lambda cfg, port: None)
 
     pv.connect(cfg, args)
     assert called["file"] == str(first)
+    assert monitor_called["conf"] == str(first)
