@@ -18,7 +18,6 @@ For a complete developer specification and requirements, see [SoR.md](SoR.md).
    - [connect / c](#pvpn-connect)
    - [disconnect / d](#pvpn-disconnect)
    - [status / s](#pvpn-status)
-   - [list](#pvpn-list)
    - [Command & Flag Aliases](#command--flag-aliases)
 7. [Uninstallation](#uninstallation)
 8. [Logging & Verbose](#logging--verbose)
@@ -27,10 +26,8 @@ For a complete developer specification and requirements, see [SoR.md](SoR.md).
 
 ## Features
 
-- **WireGuard VPN**: automatically download & rotate ProtonVPN WireGuard configs  
-- **Server Filters**: by country (`--cc`), SecureCore (`--sc`), P2P (`--p2p`), load threshold (`--threshold`)  
-- **Fastest-by-RTT**: choose lowest-latency via ICMP (`ping`) or ProtonVPN API (`--fastest api`), or early exit under `--latency-cutoff`  
-- **NAT-PMP Port Forwarding**: `natpmpc`-based mapping & automatic lease refresh 
+- **WireGuard VPN**: connect using manually provided ProtonVPN WireGuard configs
+- **NAT-PMP Port Forwarding**: `natpmpc`-based mapping & automatic lease refresh
 - **qBittorrent-nox Integration**: sync listen-port via WebUI API; resume stalled torrents
 - **Kill-Switch**: reversible iptables DROP of all non-VPN traffic (`--ks`)
 - **Modular init**: `pvpn init [--proton|--qb|--network]` for targeted or full setup
@@ -80,7 +77,7 @@ For a complete developer specification and requirements, see [SoR.md](SoR.md).
    sudo pvpn init
    ```
 
-    Follow the prompts to enter ProtonVPN IKEv2 credentials (with optional account credentials for fallback), qBittorrent settings, and network defaults. This creates `/root/.pvpn-cli/pvpn/config.ini`.
+    Follow the prompts to configure qBittorrent settings and network defaults. This creates `/root/.pvpn-cli/pvpn/config.ini`. Place any WireGuard `.conf` files under `/root/.pvpn-cli/pvpn/wireguard/`.
 
 3. Connect for the first time:
 
@@ -129,7 +126,6 @@ Run `pvpn init` to create or update your configuration file:
 
 ```bash
 pvpn init
-pvpn init --proton    # only ProtonVPN credentials
 pvpn init --qb        # only qBittorrent settings
 pvpn init --network   # only DNS & kill-switch defaults
 ```
@@ -217,21 +213,16 @@ Bring up VPN, DNS, kill-switch, NAT-PMP, qB port update:
 
 ```bash
 pvpn connect \
-  [--cc AU]              # country code
-  [--sc]                 # SecureCore multi-hop
-  [--p2p]                # P2P servers (for port-forward)
-  [--fastest ping]       # ping or api (default ping)
-  [--threshold 60]       # max server load %
-  [--latency-cutoff 100] # first server with ping < 100 ms
-  [--dns true]           # switch to Proton DNS (default true)
+  [--config wg0.conf]    # use existing WireGuard config
+  [--dns true]           # switch DNS (default true)
   [--ks true]            # enable kill-switch (default from config)
 ```
 
 **Examples:**
 
 ```bash
-pvpn c --cc US --fastest api --threshold 50
-pvpn c --p2p --latency-cutoff 80 --ks true
+pvpn c --config wg0.conf
+pvpn c --dns false --ks true
 ```
 
 ### `pvpn disconnect` (`pvpn d`)
@@ -250,13 +241,7 @@ Show interface, DNS, kill-switch, forwarded port, qB port:
 pvpn status
 ```
 
-### `pvpn list`
-
-List servers matching filters:
-
-```bash
-pvpn list [--cc AU] [--sc] [--p2p] [--fastest ping] [--threshold 60]
-```
+### Command & Flag Aliases
 
 ### Command & Flag Aliases
 
@@ -265,22 +250,15 @@ pvpn list [--cc AU] [--sc] [--p2p] [--fastest ping] [--threshold 60]
 - `pvpn connect` (`pvpn c`)
 - `pvpn disconnect` (`pvpn d`)
 - `pvpn status` (`pvpn s`)
-- `pvpn list`
 
-**Flags:**  
-| Long option             | Short alias | Applies to                  |
-|-------------------------|-------------|-----------------------------|
-| `--cc`                  | `-c`        | `connect`, `list`           |
-| `--fastest`             | `-f`        | `connect`, `list`           |
-| `--threshold`           | `-t`        | `connect`, `list`           |
-| `--latency-cutoff`      | `-l`        | `connect`                   |
-| `--dns`                 | *(none)*    | `connect`                   |
-| `--ks`                  | *(none)*    | `connect`, `disconnect`     |
-| `--sc`                  | *(none)*    | `connect`, `list`           |
-| `--p2p`                 | *(none)*    | `connect`, `list`           |
-| `--proton`              | *(none)*    | `init`                      |
-| `--qb`                  | *(none)*    | `init`                      |
-| `--network`             | *(none)*    | `init`                      |
+**Flags:**
+| Long option | Short alias | Applies to              |
+|-------------|-------------|-------------------------|
+| `--dns`     | *(none)*    | `connect`               |
+| `--ks`      | *(none)*    | `connect`, `disconnect` |
+| `--proton`  | *(none)*    | `init`                  |
+| `--qb`      | *(none)*    | `init`                  |
+| `--network` | *(none)*    | `init`                  |
 
 
 ---
@@ -306,13 +284,13 @@ It stops and disables `pvpn.service`, runs `pvpn disconnect --ks false` to tear 
 
 ## Testing
 
-Run unit and integration tests:
+Run unit tests:
 
 ```bash
 cd pvpn
 pytest -q
 ```
 
-- **Unit tests** cover config I/O and CLI parsing.  
-- **Integration test** (mocked) simulates full connect/disconnect/list workflow.
+- **Unit tests** cover config I/O and CLI parsing.
+- **Integration test** (mocked) simulates full connect/disconnect workflow.
 
