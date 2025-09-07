@@ -13,6 +13,34 @@ class DummyResp:
         return self._data
 
 
+def test_config_path_default_home(tmp_path, monkeypatch):
+    conf_dir = tmp_path / "qbprofile" / "qBittorrent" / "config"
+    conf_dir.mkdir(parents=True)
+    conf_file = conf_dir / "qBittorrent.conf"
+    conf_file.touch()
+    monkeypatch.setattr(qb.Path, "home", lambda: tmp_path)
+    assert qb.config_path() == conf_file
+
+
+def test_config_path_from_pgrep(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setattr(qb.Path, "home", lambda: home)
+
+    profile = tmp_path / "profile"
+    conf_dir = profile / "qBittorrent" / "config"
+    conf_dir.mkdir(parents=True)
+    conf_file = conf_dir / "qBittorrent.conf"
+    conf_file.touch()
+
+    def fake_check_output(cmd, *a, **k):
+        if cmd[:3] == ["pgrep", "-a", "qbittorrent-nox"]:
+            return f"1 qbittorrent-nox --profile={profile}\n"
+        raise FileNotFoundError
+
+    monkeypatch.setattr(qb.subprocess, "check_output", fake_check_output)
+    assert qb.config_path() == conf_file
+
+
 def test_get_listen_port_webui(monkeypatch):
     cfg = Config(config_dir="/tmp/pvpn-test1")
 
@@ -31,20 +59,35 @@ def test_get_listen_port_config_fallback(tmp_path, monkeypatch):
     cfg = Config(config_dir=tmp_path / "cfg")
     cfg.qb_enable = False  # skip API
 
-    conf_dir = tmp_path / ".config" / "qBittorrent"
+    conf_dir = tmp_path / "qbprofile" / "qBittorrent" / "config"
     conf_dir.mkdir(parents=True)
     conf_file = conf_dir / "qBittorrent.conf"
-    conf_file.write_text("[Preferences]\nConnection\\PortRangeMin=4242\n")
+    conf_file.write_text(
+        "[Preferences]\nSession\\Port=4242\nConnection\\PortRangeMin=1111\nWebUI\\Port=8080\n"
+    )
 
-    monkeypatch.setattr(qb.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(qb, "config_path", lambda: conf_file)
     assert qb.get_listen_port(cfg) == 4242
+
+
+def test_get_listen_port_config_legacy_fallback(tmp_path, monkeypatch):
+    cfg = Config(config_dir=tmp_path / "cfg")
+    cfg.qb_enable = False  # skip API
+
+    conf_dir = tmp_path / "qbprofile" / "qBittorrent" / "config"
+    conf_dir.mkdir(parents=True)
+    conf_file = conf_dir / "qBittorrent.conf"
+    conf_file.write_text("[Preferences]\nConnection\\PortRangeMin=5151\n")
+
+    monkeypatch.setattr(qb, "config_path", lambda: conf_file)
+    assert qb.get_listen_port(cfg) == 5151
 
 
 def test_get_listen_port_ss_fallback(tmp_path, monkeypatch):
     cfg = Config(config_dir=tmp_path / "cfg")
     cfg.qb_enable = False  # skip API
 
-    monkeypatch.setattr(qb.Path, "home", lambda: tmp_path)  # no config file
+    monkeypatch.setattr(qb, "config_path", lambda: tmp_path / "none.conf")
 
     ss_output = "LISTEN 0 128 0.0.0.0:5678 *:* users:(\"qbittorrent-nox\",pid=1,fd=1)\n"
     monkeypatch.setattr(
@@ -58,7 +101,7 @@ def test_get_listen_port_default(tmp_path, monkeypatch):
     cfg = Config(config_dir=tmp_path / "cfg")
     cfg.qb_enable = False
 
-    monkeypatch.setattr(qb.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(qb, "config_path", lambda: tmp_path / "none.conf")
     monkeypatch.setattr(
         qb.subprocess, "check_output", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError())
     )

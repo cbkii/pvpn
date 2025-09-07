@@ -33,30 +33,39 @@ def _get_vpn_gateway(iface: str) -> str:
         logging.error(f"Failed to get VPN gateway for interface {iface}: {e}")
         raise
 
-def _request_mapping(gateway: str, internal_port: int) -> int:
+def _request_mapping(gateway: str) -> int:
     """
-    Use `natpmpc` to request a port mapping for internal_port.
-    Returns the external (public) port, or 0 on failure.
+    Request a NAT-PMP port mapping from the given gateway using ``natpmpc``.
+
+    ProtonVPN assigns the public port automatically; we request a placeholder
+    mapping (internal port ``1`` and external ``0``) for both UDP and TCP and
+    return the chosen public port. On any failure, return ``0``.
     """
-    cmd = ["natpmpc", "-g", gateway, str(internal_port)]
-    try:
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=10).decode()
-        for line in out.splitlines():
-            if "Mapped public port" in line:
-                return int(line.strip().split()[-1])
-        logging.error(f"No mapping found in natpmpc output:\n{out}")
-    except subprocess.TimeoutExpired:
-        logging.error("natpmpc request timed out")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"natpmpc failed: {e.output.decode().strip()}")
-    except Exception as e:
-        logging.error(f"Unexpected error calling natpmpc: {e}")
-    return 0
+    port = 0
+    for proto in ("udp", "tcp"):
+        cmd = ["natpmpc", "-a", "1", "0", proto, "60", "-g", gateway]
+        try:
+            out = subprocess.check_output(
+                cmd, stderr=subprocess.STDOUT, timeout=10
+            ).decode()
+            for line in out.splitlines():
+                if "Mapped public port" in line:
+                    port = int(line.strip().split()[3])
+                    break
+            if not port:
+                logging.error(f"No mapping found in natpmpc output:\n{out}")
+        except subprocess.TimeoutExpired:
+            logging.error("natpmpc request timed out")
+        except subprocess.CalledProcessError as e:
+            logging.error(f"natpmpc failed: {e.output.decode().strip()}")
+        except Exception as e:
+            logging.error(f"Unexpected error calling natpmpc: {e}")
+    return port
 
 
-def probe_server(ip: str, internal_port: int) -> bool:
-    """Return True if the server responds to a NAT-PMP mapping request."""
-    return _request_mapping(ip, internal_port) != 0
+def probe_server(ip: str) -> bool:
+    """Return ``True`` if the server responds to a NAT-PMP mapping request."""
+    return _request_mapping(ip) != 0
 
 def start_forward(iface: str) -> int:
     """
@@ -66,34 +75,31 @@ def start_forward(iface: str) -> int:
     """
     check_root()
 
-    cfg = Config.load()
-    internal_port = cfg.qb_port
-    if not isinstance(internal_port, int) or internal_port <= 0:
-        logging.error(f"Invalid qBittorrent port: {internal_port}")
-        return 0
-
     try:
         gateway = _get_vpn_gateway(iface)
     except Exception:
         return 0
 
-    pub_port = _request_mapping(gateway, internal_port)
+    pub_port = _request_mapping(gateway)
     if not pub_port:
         logging.warning("Initial NAT-PMP mapping failed")
         return 0
 
-    logging.info(f"NAT-PMP mapping: public {pub_port} → internal {internal_port}")
+    cfg = Config.load()
+    logging.info(f"NAT-PMP mapping obtained public port {pub_port}")
+    cfg.qb_port = pub_port
 
     def _refresher():
         current = pub_port
         while True:
             time.sleep(REFRESH_INTERVAL)
-            new_port = _request_mapping(gateway, internal_port)
+            new_port = _request_mapping(gateway)
             if new_port and new_port != current:
                 logging.info(f"NAT-PMP port changed {current} -> {new_port}")
                 try:
                     from pvpn.qbittorrent import update_port
                     update_port(cfg, new_port)
+                    cfg.qb_port = new_port
                 except Exception as e:
                     logging.error(f"Failed to update qBittorrent: {e}")
                 current = new_port
@@ -104,10 +110,10 @@ def start_forward(iface: str) -> int:
     return pub_port
 
 
-def get_public_port(iface: str, internal_port: int) -> int:
+def get_public_port(iface: str) -> int:
     """Query the current NAT-PMP mapping and return the public port."""
     try:
         gateway = _get_vpn_gateway(iface)
     except Exception:
         return 0
-    return _request_mapping(gateway, internal_port)
+    return _request_mapping(gateway)

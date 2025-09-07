@@ -14,7 +14,7 @@ def test_status_reports_all(monkeypatch, capsys):
     monkeypatch.setattr('pvpn.wireguard.get_active_iface', lambda: 'wgpTEST0')
     monkeypatch.setattr('pvpn.wireguard.get_dns_servers', lambda: ['1.1.1.1', '9.9.9.9'])
     monkeypatch.setattr('pvpn.routing.killswitch_status', lambda: True)
-    monkeypatch.setattr('pvpn.natpmp.get_public_port', lambda iface, port: 12345)
+    monkeypatch.setattr('pvpn.natpmp.get_public_port', lambda iface: 12345)
     monkeypatch.setattr('pvpn.qbittorrent.get_listen_port', lambda cfg: 6881)
 
     pv.status(cfg)
