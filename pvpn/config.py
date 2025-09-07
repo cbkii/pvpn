@@ -96,6 +96,13 @@ class Config:
                     cfg.monitor_latency_threshold = sec.getint('latency_threshold', cfg.monitor_latency_threshold)
             except Exception as e:
                 logging.warning(f"Could not load existing config: {e}")
+        # Environment variable overrides for sensitive values
+        cfg.proton_user = os.getenv("PVPN_PROTON_USER", cfg.proton_user)
+        cfg.proton_pass = os.getenv("PVPN_PROTON_PASS", cfg.proton_pass)
+        cfg.proton_2fa = os.getenv("PVPN_PROTON_2FA", cfg.proton_2fa)
+        cfg.qb_user = os.getenv("PVPN_QB_USER", cfg.qb_user)
+        cfg.qb_pass = os.getenv("PVPN_QB_PASS", cfg.qb_pass)
+
         return cfg
 
     def save(self):
@@ -105,7 +112,8 @@ class Config:
         # Build sections
         self.parser['protonvpn'] = {
             'user': self.proton_user,
-            'pass': self.proton_pass,
+            # avoid writing secrets if provided via env vars
+            'pass': self.proton_pass if 'PVPN_PROTON_PASS' not in os.environ else '',
             '2fa': self.proton_2fa,
             'wireguard_port': str(self.wireguard_port),
             'session_dir': self.session_dir
@@ -114,7 +122,7 @@ class Config:
             'enable': str(self.qb_enable),
             'url': self.qb_url,
             'user': self.qb_user,
-            'pass': self.qb_pass,
+            'pass': self.qb_pass if 'PVPN_QB_PASS' not in os.environ else '',
             'port': str(self.qb_port)
         }
 

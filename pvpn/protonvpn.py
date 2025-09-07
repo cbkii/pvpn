@@ -8,6 +8,8 @@ import subprocess
 import logging
 import re
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from pvpn.config import Config
 from pvpn.utils import check_root
@@ -17,6 +19,16 @@ SERVERS_URL = "https://api.protonvpn.ch/vpn/logicals"
 WG_DIR = "wireguard"
 
 PING_RE = re.compile(r"min/avg/max/(?:mdev|stddev) = [\d.]+/([\d.]+)/")
+
+
+def _session() -> requests.Session:
+    """Return a requests session with retry logic."""
+    retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+    sess = requests.Session()
+    adapter = HTTPAdapter(max_retries=retries)
+    sess.mount("https://", adapter)
+    sess.mount("http://", adapter)
+    return sess
 
 def login(cfg: Config) -> str:
     """
@@ -29,8 +41,12 @@ def login(cfg: Config) -> str:
         "Password": cfg.proton_pass,
         "TwoFactorCode": cfg.proton_2fa or ""
     }
-    resp = requests.post(LOGIN_URL, json=payload, timeout=10)
-    resp.raise_for_status()
+    try:
+        resp = _session().post(LOGIN_URL, json=payload, timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        logging.error(f"Login request failed: {exc}")
+        sys.exit(1)
     data = resp.json()
     token = data.get("Token")
     if not token:
@@ -69,9 +85,13 @@ def fetch_servers(token: str) -> list:
     Fetch the full server list, including load/latency.
     """
     headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(SERVERS_URL, headers=headers, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = _session().get(SERVERS_URL, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as exc:
+        logging.error(f"Failed to fetch servers: {exc}")
+        raise
 
 def filter_servers(servers, cc=None, sc=False, p2p=False, threshold=60):
     """
@@ -142,22 +162,26 @@ def download_configs(cfg: Config, token: str) -> str:
     """
     wg_path = os.path.join(cfg.config_dir, WG_DIR)
     os.makedirs(wg_path, exist_ok=True)
+    session = _session()
     servers = fetch_servers(token)
     for s in servers:
         sid = s["ID"]
         code = s["NameCode"].lower()
         url = f"https://api.protonvpn.ch/vpn/config?server_id={sid}&protocol=wireguard"
         headers = {"Authorization": f"Bearer {token}"}
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            fname = f"wgp{code}{sid}.conf"
-            try:
-                with open(os.path.join(wg_path, fname), "wb") as f:
-                    f.write(resp.content)
-            except Exception as e:
-                logging.error(f"Failed writing WG config {fname}: {e}")
-        else:
-            logging.warning(f"Failed to download config for server {sid}")
+        try:
+            resp = session.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                fname = f"wgp{code}{sid}.conf"
+                try:
+                    with open(os.path.join(wg_path, fname), "wb") as f:
+                        f.write(resp.content)
+                except Exception as e:
+                    logging.error(f"Failed writing WG config {fname}: {e}")
+            else:
+                logging.warning(f"Failed to download config for server {sid}")
+        except requests.RequestException as exc:
+            logging.warning(f"Error downloading config for server {sid}: {exc}")
     return wg_path
 
 def connect(cfg: Config, args):

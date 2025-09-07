@@ -34,9 +34,9 @@ def update_port(cfg: Config, new_port: int):
         logging.warning("No forwarded port provided; skipping qBittorrent update")
         return
 
+    session = requests.Session()
     try:
         logging.info("Updating qBittorrent port via WebUI API")
-        session = requests.Session()
         resp = session.post(
             f"{cfg.qb_url}/api/v2/auth/login",
             data={"username": cfg.qb_user, "password": cfg.qb_pass},
@@ -60,8 +60,12 @@ def update_port(cfg: Config, new_port: int):
         r2.raise_for_status()
         logging.info(f"WebUI API: listen_port set to {new_port}")
         _resume_torrents(cfg, session)
-    except Exception as e:
+    except requests.RequestException as e:
         logging.error(f"WebUI API update failed: {e}")
+    finally:
+        close = getattr(session, "close", None)
+        if close:
+            close()
 
 
 def get_listen_port(cfg: Config) -> int:
@@ -76,8 +80,8 @@ def get_listen_port(cfg: Config) -> int:
 
     # 1. WebUI API
     if cfg.qb_enable:
+        session = requests.Session()
         try:
-            session = requests.Session()
             session.post(
                 f"{cfg.qb_url}/api/v2/auth/login",
                 data={'username': cfg.qb_user, 'password': cfg.qb_pass},
@@ -88,8 +92,12 @@ def get_listen_port(cfg: Config) -> int:
             port = int(resp.json().get('listen_port') or 0)
             if port:
                 return port
-        except Exception as e:
+        except requests.RequestException as e:
             logging.debug(f"WebUI API port query failed: {e}")
+        finally:
+            close = getattr(session, "close", None)
+            if close:
+                close()
 
     # 2. Config file
     try:

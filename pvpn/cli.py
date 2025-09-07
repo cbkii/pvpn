@@ -4,22 +4,29 @@
 import argparse
 import sys
 import shutil
+import logging
 from pvpn.config import Config
 from pvpn import protonvpn
 
+
 def check_dependencies():
-    """
-    Warn if required system tools are missing.
-    """
+    """Warn if required system tools are missing."""
     required = ["wg", "ip", "iptables", "natpmpc", "ping", "curl"]
     missing = [tool for tool in required if shutil.which(tool) is None]
     if missing:
         print(f"Warning: Missing system tools: {', '.join(missing)}. Some features may not work.")
 
-def build_parser():
+
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pvpn",
-        description="Headless ProtonVPN WireGuard CLI with qBittorrent-nox integration"
+        description="Headless ProtonVPN WireGuard CLI with qBittorrent-nox integration",
+    )
+    p.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Logging verbosity",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -36,22 +43,36 @@ def build_parser():
     conn.add_argument("-c", "--cc", metavar="COUNTRY", help="Country code (e.g. AU)")
     conn.add_argument("--sc", action="store_true", help="Use SecureCore servers")
     conn.add_argument("--p2p", action="store_true", help="Use P2P servers")
-    conn.add_argument("-f", "--fastest", choices=["ping", "api"], default=None,
-                      help="Server selection method")
-    conn.add_argument("-t", "--threshold", type=int, metavar="1-100", default=None,
-                      help="Maximum server load percentage")
-    conn.add_argument("-l", "--latency-cutoff", type=int, metavar="MS", default=None,
-                      help="Return first server with ping < cutoff ms")
-    conn.add_argument("--dns", choices=["true", "false"], default=None,
-                      help="Switch to ProtonDNS (true|false)")
-    conn.add_argument("--ks", choices=["true", "false"], default=None,
-                      help="Enable kill-switch (true|false)")
+    conn.add_argument(
+        "-f",
+        "--fastest",
+        choices=["ping", "api"],
+        default=None,
+        help="Server selection method",
+    )
+    conn.add_argument(
+        "-t",
+        "--threshold",
+        type=int,
+        metavar="1-100",
+        default=None,
+        help="Maximum server load percentage",
+    )
+    conn.add_argument(
+        "-l",
+        "--latency-cutoff",
+        type=int,
+        metavar="MS",
+        default=None,
+        help="Return first server with ping < cutoff ms",
+    )
+    conn.add_argument("--dns", choices=["true", "false"], default=None, help="Switch to ProtonDNS (true|false)")
+    conn.add_argument("--ks", choices=["true", "false"], default=None, help="Enable kill-switch (true|false)")
 
     # disconnect
     disc = sub.add_parser("disconnect", aliases=["d"], help="Tear down VPN connection")
     disc.set_defaults(cmd="disconnect")
-    disc.add_argument("--ks", choices=["true", "false"], default=None,
-                      help="Leave kill-switch active? (true|false)")
+    disc.add_argument("--ks", choices=["true", "false"], default=None, help="Leave kill-switch active? (true|false)")
 
     # status
     stat = sub.add_parser("status", aliases=["s"], help="Show VPN & qBittorrent status")
@@ -63,43 +84,51 @@ def build_parser():
     lst.add_argument("-c", "--cc", help="Country code filter")
     lst.add_argument("--sc", action="store_true", help="SecureCore only")
     lst.add_argument("--p2p", action="store_true", help="P2P only")
-    lst.add_argument("-f", "--fastest", choices=["ping", "api"], default=None,
-                     help="Sort by latency/load")
-    lst.add_argument("-t", "--threshold", type=int,
-                     help="Maximum server load percentage")
+    lst.add_argument(
+        "-f",
+        "--fastest",
+        choices=["ping", "api"],
+        default=None,
+        help="Sort by latency/load",
+    )
+    lst.add_argument("-t", "--threshold", type=int, help="Maximum server load percentage")
 
     return p
 
-def main():
+
+def main() -> None:
     check_dependencies()
     parser = build_parser()
     args = parser.parse_args()
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper()),
+        format="%(asctime)s %(levelname)s: %(message)s",
+    )
     cfg = Config.load()
+
+    if args.cmd in {"connect", "list"}:
+        thr = getattr(args, "threshold", None)
+        if thr is not None and not 1 <= thr <= 100:
+            parser.error("--threshold must be between 1 and 100")
+        cutoff = getattr(args, "latency_cutoff", None)
+        if cutoff is not None and cutoff <= 0:
+            parser.error("--latency-cutoff must be positive")
 
     cmd = args.cmd
     if cmd == "init":
-        cfg.interactive_setup(
-            proton=args.proton,
-            qb=args.qb,
-            network=args.network
-        )
-
+        cfg.interactive_setup(proton=args.proton, qb=args.qb, network=args.network)
     elif cmd == "connect":
         protonvpn.connect(cfg, args)
-
     elif cmd == "disconnect":
         protonvpn.disconnect(cfg, args)
-
     elif cmd == "status":
         protonvpn.status(cfg)
-
     elif cmd == "list":
         protonvpn.list_servers(cfg, args)
-
     else:
         parser.print_help()
         sys.exit(1)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
