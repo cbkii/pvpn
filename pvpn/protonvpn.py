@@ -1,321 +1,118 @@
 # pvpn/protonvpn.py
 
+"""Simplified connection management using local WireGuard configs.
+
+This module no longer attempts to authenticate with the ProtonVPN API or
+download configuration files. Instead it operates solely on WireGuard
+configuration files that the user has placed in the configuration directory.
+"""
+
 import os
 import sys
-import json
-import time
-import subprocess
 import logging
-import re
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from pvpn.config import Config
 from pvpn.utils import check_root
 
-LOGIN_URL = "https://account.protonvpn.com/api/v4/auth/login"
-SERVERS_URL = "https://api.protonvpn.ch/vpn/logicals"
 WG_DIR = "wireguard"
 
-PING_RE = re.compile(r"min/avg/max/(?:mdev|stddev) = [\d.]+/([\d.]+)/")
-
-
-def _session() -> requests.Session:
-    """Return a requests session with retry logic."""
-    retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
-    sess = requests.Session()
-    adapter = HTTPAdapter(max_retries=retries)
-    sess.mount("https://", adapter)
-    sess.mount("http://", adapter)
-    return sess
-
-def login(cfg: Config) -> str:
-    """
-    Authenticate to ProtonVPN and obtain a fresh token.
-    Stores token + timestamp for reuse.
-    """
-    logging.info("Logging in to ProtonVPN API")
-
-    # Try IKEv2 credentials first
-    if cfg.proton_ike_user and cfg.proton_ike_pass:
-        payload = {"Username": cfg.proton_ike_user, "Password": cfg.proton_ike_pass}
-        try:
-            resp = _session().post(LOGIN_URL, json=payload, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            token = data.get("Token")
-            if token:
-                logging.debug("Authenticated with IKEv2 credentials")
-                session = {"token": token, "timestamp": time.time()}
-                session_file = os.path.join(cfg.session_dir, "token.json")
-                try:
-                    with open(session_file, "w") as f:
-                        json.dump(session, f)
-                    logging.debug(f"Saved session token to {session_file}")
-                except Exception as e:
-                    logging.error(f"Failed to write session file: {e}")
-                return token
-            logging.warning("IKEv2 credentials did not return a token; falling back")
-        except requests.RequestException as exc:
-            logging.warning(f"IKEv2 login failed: {exc}")
-
-    # Fallback to regular account credentials
-    payload = {
-        "Username": cfg.proton_user,
-        "Password": cfg.proton_pass,
-        "TwoFactorCode": cfg.proton_2fa or "",
-    }
-    try:
-        resp = _session().post(LOGIN_URL, json=payload, timeout=10)
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        logging.error(f"Login request failed: {exc}")
-        sys.exit(1)
-    data = resp.json()
-    token = data.get("Token")
-    if not token:
-        logging.error("Login did not return a token")
-        sys.exit(1)
-
-    session = {"token": token, "timestamp": time.time()}
-    session_file = os.path.join(cfg.session_dir, "token.json")
-    try:
-        with open(session_file, "w") as f:
-            json.dump(session, f)
-        logging.debug(f"Saved session token to {session_file}")
-    except Exception as e:
-        logging.error(f"Failed to write session file: {e}")
-
-    return token
-
-def load_token(cfg: Config) -> str:
-    """
-    Load a saved token if under 23h old, else re-login.
-    """
-    session_file = os.path.join(cfg.session_dir, "token.json")
-    if os.path.exists(session_file):
-        try:
-            with open(session_file) as f:
-                data = json.load(f)
-            if time.time() - data.get("timestamp", 0) < 23 * 3600:
-                return data.get("token")
-            logging.info("ProtonVPN token expired; re-authenticating")
-        except Exception as e:
-            logging.warning(f"Error reading token file: {e}")
-    return login(cfg)
-
-def fetch_servers(token: str) -> list:
-    """
-    Fetch the full server list, including load/latency.
-    """
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        resp = _session().get(SERVERS_URL, headers=headers, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as exc:
-        logging.error(f"Failed to fetch servers: {exc}")
-        raise
-
-def filter_servers(servers, cc=None, sc=False, p2p=False, threshold=60):
-    """
-    Filter by country code, SecureCore, P2P, and max load.
-    """
-    out = []
-    for s in servers:
-        code = s.get("NameCode", "")[-2:].lower()
-        if cc and code != cc.lower():
-            continue
-        if sc and "SecureCore" not in s.get("Features", []):
-            continue
-        if p2p and "P2P" not in s.get("Features", []):
-            continue
-        load = s.get("Load") or 100
-        if load > threshold:
-            continue
-        out.append(s)
-    return out
-
-def select_fastest(servers, method="ping", cutoff=None):
-    """
-    Select lowest-latency server, or first under cutoff ms if provided.
-    """
-    best = None
-    best_val = float("inf")
-    for s in servers:
-        if method == "api":
-            val = s.get("Latency") or float("inf")
-        else:
-            endpoint = s.get("UDP", "")
-            ip = endpoint.split(":")[0]
-            try:
-                out = subprocess.check_output(
-                    ["ping", "-c", "2", "-W", "1", ip],
-                    stderr=subprocess.DEVNULL,
-                    timeout=5,
-                    text=True,
-                )
-                match = PING_RE.search(out)
-                if not match:
-                    logging.debug(f"Unexpected ping output for {ip}: {out}")
-                    continue
-                val = float(match.group(1))
-            except subprocess.TimeoutExpired:
-                logging.warning(f"Ping to {ip} timed out")
-                continue
-            except Exception as e:
-                logging.debug(f"Ping error {ip}: {e}")
-                continue
-
-        # Early exit if meets cutoff
-        if cutoff is not None and val < cutoff:
-            logging.info(f"Server {s['Name']} under cutoff: {val}ms")
-            return s
-
-        if val < best_val:
-            best_val, best = val, s
-
-    if not best:
-        logging.error("No reachable servers found")
-        sys.exit(1)
-    return best
-
-def download_configs(cfg: Config, token: str) -> str:
-    """
-    Download WireGuard configs for all servers to <config_dir>/wireguard.
-    """
-    wg_path = os.path.join(cfg.config_dir, WG_DIR)
-    os.makedirs(wg_path, exist_ok=True)
-    session = _session()
-    servers = fetch_servers(token)
-    for s in servers:
-        sid = s["ID"]
-        code = s["NameCode"].lower()
-        url = f"https://api.protonvpn.ch/vpn/config?server_id={sid}&protocol=wireguard"
-        headers = {"Authorization": f"Bearer {token}"}
-        try:
-            resp = session.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                fname = f"wgp{code}{sid}.conf"
-                try:
-                    with open(os.path.join(wg_path, fname), "wb") as f:
-                        f.write(resp.content)
-                except Exception as e:
-                    logging.error(f"Failed writing WG config {fname}: {e}")
-            else:
-                logging.warning(f"Failed to download config for server {sid}")
-        except requests.RequestException as exc:
-            logging.warning(f"Error downloading config for server {sid}: {exc}")
-    return wg_path
 
 def connect(cfg: Config, args):
-    """
-    High-level connect command:
-      - authenticate
-      - download configs if needed
-      - filter & select server
-      - bring up WireGuard
-      - apply DNS, kill-switch, NAT-PMP, qBittorrent updates
-    """
+    """Bring up a WireGuard interface using an existing configuration."""
+
     check_root()
-
-    token = load_token(cfg)
     wg_path = os.path.join(cfg.config_dir, WG_DIR)
-    if not os.path.isdir(wg_path) or not os.listdir(wg_path):
-        download_configs(cfg, token)
 
-    servers = fetch_servers(token)
-    thr = args.threshold or cfg.network_threshold_default
-    flt = filter_servers(servers, args.cc, args.sc, args.p2p, thr)
-    if not flt:
-        logging.error("No servers match the specified filters")
+    def _connect_with_conf(conf_file: str):
+        from pvpn.wireguard import bring_up
+
+        iface = bring_up(
+            conf_file,
+            dns=(args.dns == "true") if args.dns else cfg.network_dns_default,
+        )
+
+        if (args.ks == "true") or (args.ks is None and cfg.network_ks_default):
+            from pvpn.routing import enable_killswitch
+
+            enable_killswitch(iface)
+
+        from pvpn.qbittorrent import start_service, update_port
+
+        if cfg.qb_enable:
+            start_service()
+
+        from pvpn.natpmp import start_forward
+
+        pub_port = start_forward(iface)
+
+        if pub_port:
+            update_port(cfg, pub_port)
+        else:
+            logging.warning("Port forwarding unavailable; continuing without it")
+
+        from pvpn.monitor import start_monitor
+
+        monitor_thread = start_monitor(cfg, iface)
+
+        port_msg = pub_port if pub_port else "none"
+        print(
+            f"✅ Connected using {os.path.basename(conf_file)} on {iface}, forwarded port {port_msg}"
+        )
+
+        try:
+            monitor_thread.join()
+        except KeyboardInterrupt:
+            pass
+
+    if getattr(args, "config", None):
+        conf_file = args.config
+        if not os.path.isabs(conf_file):
+            conf_file = os.path.join(wg_path, conf_file)
+        if not os.path.isfile(conf_file):
+            logging.error(f"WireGuard config {conf_file} not found")
+            sys.exit(1)
+        _connect_with_conf(conf_file)
+        return
+
+    if not os.path.isdir(wg_path):
+        logging.error("WireGuard config directory missing")
         sys.exit(1)
-
-    from pvpn.natpmp import probe_server
-
-    method = args.fastest or "ping"
-    cutoff = getattr(args, "latency_cutoff", None)
-    server = None
-    while flt:
-        cand = select_fastest(flt, method=method, cutoff=cutoff)
-        ip = cand.get("UDP", "").split(":")[0]
-        if probe_server(ip):
-            server = cand
-            break
-        logging.info(f"Server {cand['Name']} lacks NAT-PMP; trying next")
-        flt.remove(cand)
-
-    if not server:
-        logging.error("No NAT-PMP capable servers found")
+    confs = [f for f in sorted(os.listdir(wg_path)) if f.endswith(".conf")]
+    if not confs:
+        logging.error("No WireGuard config files found")
         sys.exit(1)
+    _connect_with_conf(os.path.join(wg_path, confs[0]))
 
-    # Determine config file name
-    code = server["NameCode"].lower()
-    sid = server["ID"]
-    conf_file = os.path.join(wg_path, f"wgp{code}{sid}.conf")
-    if not os.path.isfile(conf_file):
-        logging.error(f"WireGuard config {conf_file} not found")
-        sys.exit(1)
-
-    from pvpn.wireguard import bring_up
-    iface = bring_up(conf_file, dns=(args.dns == "true") if args.dns else cfg.network_dns_default)
-
-    if (args.ks == "true") or (args.ks is None and cfg.network_ks_default):
-        from pvpn.routing import enable_killswitch
-        enable_killswitch(iface)
-
-    from pvpn.qbittorrent import start_service, update_port
-    if cfg.qb_enable:
-        start_service()
-
-    from pvpn.natpmp import start_forward
-    pub_port = start_forward(iface)
-
-    if pub_port:
-        update_port(cfg, pub_port)
-    else:
-        logging.warning("Port forwarding unavailable; continuing without it")
-
-    from pvpn.monitor import start_monitor
-    monitor_thread = start_monitor(cfg, iface)
-
-    port_msg = pub_port if pub_port else 'none'
-    print(f"✅ Connected: {server['Name']} on {iface}, forwarded port {port_msg}")
-
-    # Keep process alive while monitoring runs
-    try:
-        monitor_thread.join()
-    except KeyboardInterrupt:
-        pass
 
 def disconnect(cfg: Config, args):
-    """
-    High-level disconnect command:
-      - optionally disable kill-switch
-      - tear down interface
-      - restore DNS
-    """
+    """Tear down the active WireGuard interface and optional kill-switch."""
+
     check_root()
 
     from pvpn.qbittorrent import stop_service
+
     if cfg.qb_enable:
         stop_service()
 
     if args.ks == "false":
         from pvpn.routing import disable_killswitch
+
         disable_killswitch()
 
     from pvpn.wireguard import bring_down
+
     bring_down()
 
     from pvpn.utils import restore_file
+
     restore_file("/etc/resolv.conf.pvpnbak", "/etc/resolv.conf")
 
     print("✅ Disconnected")
 
+
 def status(cfg: Config):
-    """Display WireGuard, routing, and qBittorrent status with colour and icons."""
+    """Display WireGuard, routing, and qBittorrent status."""
+
     from pvpn.wireguard import get_active_iface, get_dns_servers
     from pvpn.routing import killswitch_status
     from pvpn.natpmp import get_public_port
@@ -345,16 +142,3 @@ def status(cfg: Config):
     qb_port = get_listen_port(cfg)
     line("qBittorrent port", bool(qb_port), str(qb_port) if qb_port else "unknown")
 
-def list_servers(cfg: Config, args):
-    """
-    List servers matching filters; optionally show fastest.
-    """
-    token = load_token(cfg)
-    servers = fetch_servers(token)
-    thr = args.threshold or cfg.network_threshold_default
-    flt = filter_servers(servers, args.cc, args.sc, args.p2p, thr)
-    if args.fastest:
-        srv = select_fastest(flt, method=args.fastest)
-        print(json.dumps(srv, indent=2))
-    else:
-        print(json.dumps(flt, indent=2))

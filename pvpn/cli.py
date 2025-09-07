@@ -40,33 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
     # connect
     conn = sub.add_parser("connect", aliases=["c"], help="Establish VPN connection")
     conn.set_defaults(cmd="connect")
-    conn.add_argument("-c", "--cc", metavar="COUNTRY", help="Country code (e.g. AU)")
-    conn.add_argument("--sc", action="store_true", help="Use SecureCore servers")
-    conn.add_argument("--p2p", action="store_true", help="Use P2P servers")
-    conn.add_argument(
-        "-f",
-        "--fastest",
-        choices=["ping", "api"],
-        default=None,
-        help="Server selection method",
-    )
-    conn.add_argument(
-        "-t",
-        "--threshold",
-        type=int,
-        metavar="1-100",
-        default=None,
-        help="Maximum server load percentage",
-    )
-    conn.add_argument(
-        "-l",
-        "--latency-cutoff",
-        type=int,
-        metavar="MS",
-        default=None,
-        help="Return first server with ping < cutoff ms",
-    )
-    conn.add_argument("--dns", choices=["true", "false"], default=None, help="Switch to ProtonDNS (true|false)")
+    conn.add_argument("--config", help="Path to WireGuard .conf file")
+    conn.add_argument("--dns", choices=["true", "false"], default=None, help="Switch DNS (true|false)")
     conn.add_argument("--ks", choices=["true", "false"], default=None, help="Enable kill-switch (true|false)")
 
     # disconnect
@@ -77,21 +52,6 @@ def build_parser() -> argparse.ArgumentParser:
     # status
     stat = sub.add_parser("status", aliases=["s"], help="Show VPN & qBittorrent status")
     stat.set_defaults(cmd="status")
-
-    # list
-    lst = sub.add_parser("list", help="List available servers")
-    lst.set_defaults(cmd="list")
-    lst.add_argument("-c", "--cc", help="Country code filter")
-    lst.add_argument("--sc", action="store_true", help="SecureCore only")
-    lst.add_argument("--p2p", action="store_true", help="P2P only")
-    lst.add_argument(
-        "-f",
-        "--fastest",
-        choices=["ping", "api"],
-        default=None,
-        help="Sort by latency/load",
-    )
-    lst.add_argument("-t", "--threshold", type=int, help="Maximum server load percentage")
 
     return p
 
@@ -106,14 +66,6 @@ def main() -> None:
     )
     cfg = Config.load()
 
-    if args.cmd in {"connect", "list"}:
-        thr = getattr(args, "threshold", None)
-        if thr is not None and not 1 <= thr <= 100:
-            parser.error("--threshold must be between 1 and 100")
-        cutoff = getattr(args, "latency_cutoff", None)
-        if cutoff is not None and cutoff <= 0:
-            parser.error("--latency-cutoff must be positive")
-
     cmd = args.cmd
     if cmd == "init":
         cfg.interactive_setup(proton=args.proton, qb=args.qb, network=args.network)
@@ -123,8 +75,6 @@ def main() -> None:
         protonvpn.disconnect(cfg, args)
     elif cmd == "status":
         protonvpn.status(cfg)
-    elif cmd == "list":
-        protonvpn.list_servers(cfg, args)
     else:
         parser.print_help()
         sys.exit(1)
