@@ -52,7 +52,7 @@ def connect(cfg: Config, args):
 
         from pvpn.monitor import start_monitor
 
-        monitor_thread = start_monitor(cfg, iface)
+        monitor_thread = start_monitor(cfg, iface, conf_file)
 
         port_msg = pub_port if pub_port else "none"
         print(

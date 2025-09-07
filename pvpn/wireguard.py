@@ -32,6 +32,7 @@ def ensure_ipv6_allowed(conf_file: str) -> None:
     except Exception as e:
         logging.debug(f"Failed to ensure IPv6 AllowedIPs: {e}")
 
+
 # Constants for DNS management
 RESOLV_CONF = "/etc/resolv.conf"
 RESOLV_BAK = "/etc/resolv.conf.pvpnbak"

@@ -68,7 +68,7 @@ def _ping(ip: str) -> float | None:
         return None
 
 
-def _monitor_loop(cfg: Config, iface: str) -> None:
+def _monitor_loop(cfg: Config, iface: str, conf_file: str | None = None) -> None:
     """Worker loop run in a background thread."""
 
     interval = cfg.monitor_interval
@@ -114,22 +114,31 @@ def _monitor_loop(cfg: Config, iface: str) -> None:
                 latency_cutoff=None,
                 dns=None,
                 ks=None,
+                config=conf_file,
             )
             try:
                 protonvpn.disconnect(cfg, disc_args)
-            except Exception as exc:  # noqa: BLE001
+            except BaseException as exc:  # noqa: BLE001
                 logging.error(f"monitor: disconnect failed: {exc}")
             try:
                 protonvpn.connect(cfg, conn_args)
-            except Exception as exc:  # noqa: BLE001
+            except BaseException as exc:  # noqa: BLE001
                 logging.error(f"monitor: reconnect failed: {exc}")
             return
 
 
-def start_monitor(cfg: Config, iface: str) -> threading.Thread:
-    """Spawn the monitoring thread and return it."""
+def start_monitor(
+    cfg: Config, iface: str, conf_file: str | None = None
+) -> threading.Thread:
+    """Spawn the monitoring thread.
 
-    thread = threading.Thread(target=_monitor_loop, args=(cfg, iface), daemon=True)
+    ``conf_file`` is forwarded to :func:`pvpn.protonvpn.connect` if a reconnect is
+    required.
+    """
+
+    thread = threading.Thread(
+        target=_monitor_loop, args=(cfg, iface, conf_file), daemon=True
+    )
     thread.start()
     return thread
 
