@@ -26,6 +26,8 @@ class Config:
         self.parser = configparser.ConfigParser()
 
         # Default settings
+        self.proton_ike_user = ""
+        self.proton_ike_pass = ""
         self.proton_user = ""
         self.proton_pass = ""
         self.proton_2fa = ""
@@ -68,6 +70,8 @@ class Config:
                 # ProtonVPN section
                 if 'protonvpn' in cfg.parser:
                     sec = cfg.parser['protonvpn']
+                    cfg.proton_ike_user = sec.get('ike_user', cfg.proton_ike_user)
+                    cfg.proton_ike_pass = sec.get('ike_pass', cfg.proton_ike_pass)
                     cfg.proton_user = sec.get('user', cfg.proton_user)
                     cfg.proton_pass = sec.get('pass', cfg.proton_pass)
                     cfg.proton_2fa = sec.get('2fa', cfg.proton_2fa)
@@ -97,6 +101,8 @@ class Config:
             except Exception as e:
                 logging.warning(f"Could not load existing config: {e}")
         # Environment variable overrides for sensitive values
+        cfg.proton_ike_user = os.getenv("PVPN_PROTON_IKE_USER", cfg.proton_ike_user)
+        cfg.proton_ike_pass = os.getenv("PVPN_PROTON_IKE_PASS", cfg.proton_ike_pass)
         cfg.proton_user = os.getenv("PVPN_PROTON_USER", cfg.proton_user)
         cfg.proton_pass = os.getenv("PVPN_PROTON_PASS", cfg.proton_pass)
         cfg.proton_2fa = os.getenv("PVPN_PROTON_2FA", cfg.proton_2fa)
@@ -111,6 +117,8 @@ class Config:
         """
         # Build sections
         self.parser['protonvpn'] = {
+            'ike_user': self.proton_ike_user,
+            'ike_pass': self.proton_ike_pass if 'PVPN_PROTON_IKE_PASS' not in os.environ else '',
             'user': self.proton_user,
             # avoid writing secrets if provided via env vars
             'pass': self.proton_pass if 'PVPN_PROTON_PASS' not in os.environ else '',
@@ -197,8 +205,19 @@ class Config:
 
         if proton:
             print("=== ProtonVPN Configuration ===")
-            self.proton_user = input(f"ProtonVPN username [{self.proton_user}]: ") or self.proton_user
-            self.proton_pass = getpass.getpass("ProtonVPN password: ") or self.proton_pass
+            self.proton_ike_user = input(
+                f"ProtonVPN IKEv2 username [{self.proton_ike_user}]: "
+            ) or self.proton_ike_user
+            self.proton_ike_pass = (
+                getpass.getpass("ProtonVPN IKEv2 password: ") or self.proton_ike_pass
+            )
+            self.proton_user = input(
+                f"ProtonVPN account username (fallback) [{self.proton_user}]: "
+            ) or self.proton_user
+            self.proton_pass = (
+                getpass.getpass("ProtonVPN account password (fallback): ")
+                or self.proton_pass
+            )
             self.proton_2fa = input(f"2FA code (if any) [{self.proton_2fa}]: ") or self.proton_2fa
             port = input(f"WireGuard port [{self.wireguard_port}]: ") or str(self.wireguard_port)
             self.wireguard_port = int(port)
