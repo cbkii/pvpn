@@ -67,7 +67,7 @@ For a complete developer specification and requirements, see [SoR.md](SoR.md).
 1. Clone the repository and run the installer:
 
    ```bash
-   git clone https://github.com/you/pvpn.git
+   git clone https://github.com/cbkii/pvpn.git
    cd pvpn
    sudo ./install.sh
    ```
@@ -101,7 +101,7 @@ For a complete developer specification and requirements, see [SoR.md](SoR.md).
 ## Manual Installation
 
 ```bash
-git clone https://github.com/you/pvpn.git
+git clone https://github.com/cbkii/pvpn.git
 cd pvpn
 
 # Create & activate a virtual environment
@@ -167,6 +167,19 @@ interval = 60
 failures = 3
 latency_threshold = 500
 ```
+
+#### Environment variables
+
+To avoid persisting sensitive credentials in `config.ini`, set one or more of
+the following environment variables before running `pvpn`:
+
+```
+PVPN_PROTON_USER, PVPN_PROTON_PASS, PVPN_PROTON_2FA
+PVPN_QB_USER, PVPN_QB_PASS
+```
+
+Values provided via environment variables take precedence over `config.ini`
+and are omitted when the configuration is saved.
 
 ### 3. Background Monitor
 
