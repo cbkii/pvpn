@@ -80,7 +80,7 @@ For a complete developer specification and requirements, see [SoR.md](SoR.md).
    sudo pvpn init
    ```
 
-   Follow the prompts to enter ProtonVPN credentials, qBittorrent settings, and network defaults. This creates `/root/.pvpn-cli/pvpn/config.ini`.
+    Follow the prompts to enter ProtonVPN IKEv2 credentials (with optional account credentials for fallback), qBittorrent settings, and network defaults. This creates `/root/.pvpn-cli/pvpn/config.ini`.
 
 3. Connect for the first time:
 

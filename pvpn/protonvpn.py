@@ -36,10 +36,35 @@ def login(cfg: Config) -> str:
     Stores token + timestamp for reuse.
     """
     logging.info("Logging in to ProtonVPN API")
+
+    # Try IKEv2 credentials first
+    if cfg.proton_ike_user and cfg.proton_ike_pass:
+        payload = {"Username": cfg.proton_ike_user, "Password": cfg.proton_ike_pass}
+        try:
+            resp = _session().post(LOGIN_URL, json=payload, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            token = data.get("Token")
+            if token:
+                logging.debug("Authenticated with IKEv2 credentials")
+                session = {"token": token, "timestamp": time.time()}
+                session_file = os.path.join(cfg.session_dir, "token.json")
+                try:
+                    with open(session_file, "w") as f:
+                        json.dump(session, f)
+                    logging.debug(f"Saved session token to {session_file}")
+                except Exception as e:
+                    logging.error(f"Failed to write session file: {e}")
+                return token
+            logging.warning("IKEv2 credentials did not return a token; falling back")
+        except requests.RequestException as exc:
+            logging.warning(f"IKEv2 login failed: {exc}")
+
+    # Fallback to regular account credentials
     payload = {
         "Username": cfg.proton_user,
         "Password": cfg.proton_pass,
-        "TwoFactorCode": cfg.proton_2fa or ""
+        "TwoFactorCode": cfg.proton_2fa or "",
     }
     try:
         resp = _session().post(LOGIN_URL, json=payload, timeout=10)
